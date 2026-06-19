@@ -1,6 +1,4 @@
-<img alt="Phunk" width="150" src="./assets/phunk-text.svg">
-
----
+# <img alt="Phunk" width="150" src="./assets/phunk.svg">
 
 > *PHP PHUNK coding style guide draft*
 
@@ -13,8 +11,6 @@ The primary motivation for this guide is to make it more practical to write larg
 In this style we will favor free functions, use less abstractions and focus more on how we store and transform our data. We will use namespaces as modules and classes are used more sparingly instead of the default unit of abstraction.
 
 For lack of a better term we will call it a procedural style: programs can be thought of as a set of assembly lines where data is loaded at one end with various stations along the line to manipulate it to the other end.
-
-The data those lines carry is kept flat: plain arrays and records of values laid out together, reached by index or key, rather than a graph of objects wired to one another by references. Flat data is easy to see all at once, easy to move through the line in bulk, and, as it turns out, the layout the machine runs fastest on.
 
 Structuring your code like this will make your computer have a better time understanding it and consequently its not unlikely that you will too.
 
