@@ -30,6 +30,17 @@ lowercase. Applies inside any identifier.
 - `parseXmlId()`, not `parseXMLID()`
 - `$user_id`, not `$user_iD`
 
+## Array keys
+
+String keys you define use `snake_case`, matching variables and properties.
+
+- `['order_line' => $x]`, not `['orderLine' => $x]`
+
+This applies only to keys the codebase owns (config, internal data shapes,
+return-array contracts). Keys dictated by an external source -- database
+columns, JSON/API payloads, `$_SERVER`, HTTP headers -- retain the source's
+casing. Do not rewrite them to match this rule.
+
 ## Formatting
 
 Defer to PER Coding Style. Key points:
