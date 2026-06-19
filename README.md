@@ -44,7 +44,8 @@ Nothing is a silver bullet, of course. The pipeline brings recurring pitfalls of
 
 ### Scattered state
 
-> TL;DR: Consolidate each value's mutations into as few stages as possible.
+> [!TIP]
+> Consolidate each value's mutations into as few stages as possible.
 
 The more stages that can change a value, the more places you must search when it comes out wrong, and the more hidden purposes it quietly picks up as its meaning shifts from stage to stage.
 
@@ -54,7 +55,8 @@ That is an extra name to track, but it tells the truth about what the value is.
 
 ### Leaky functions
 
-> TL;DR: A function should touch only the state passed to it.
+> [!TIP]
+> A function should touch only the state passed to it.
 
 Reaching outside its arguments, to globals, I/O, or data shared by reference, makes its dependencies and effects invisible from the call site. For any function, take stock of whether it:
 
@@ -74,7 +76,8 @@ Full purity is a large demand with costs of its own. You gain most of the benefi
 
 ### Tangled data
 
-> TL;DR: Design the data on its own terms, before the code.
+> [!TIP]
+> Design the data on its own terms, before the code.
 
 Data more complex than the problem requires is harder to understand, harder to change, and harder to keep mutation consolidated: if type A references type B, every touch of A drags in B, so you cannot manage them independently.
 
@@ -89,7 +92,8 @@ Working procedurally, you can interrogate a design before any code exists:
 
 ### Stretched context
 
-> TL;DR: Some logic lives across runs, not inside one.
+> [!TIP]
+> Some logic lives across runs, not inside one.
 
 A pipeline reasons cleanly about a single run, but a program's hardest parts often span many: a long-running async task that blocks some interactions until it finishes, a scripted game sequence that plays out over many frames. This state fits in no single event handler or tick, so it needs an explicit home and careful thought.
 
@@ -99,7 +103,8 @@ Both pressures point the same way: holding state across runs, and replaying it t
 
 ## A loop at the center
 
-> TL;DR: Run the pipeline on a fixed cadence, advancing all state in one place.
+> [!TIP]
+> Run the pipeline on a fixed cadence, advancing all state in one place.
 
 Think of the loop as the data pipeline given a heartbeat. A single run is stateless: data in, result out, nothing kept. Run it over and over against state you hold between passes, and you have a program that lives in time instead of forgetting itself after every request.
 
