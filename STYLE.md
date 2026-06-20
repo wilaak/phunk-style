@@ -1,16 +1,16 @@
 # Style guide
 
-The concrete syntax rules of the PHUNK style: casing, naming, control flow, data
-design, comments, and formatting. For the reasoning behind them, see the
-[README](README.md); for code organization, [MODULES.md](MODULES.md); for hot-path
-specifics, [OPTIMIZATIONS.md](OPTIMIZATIONS.md).
+The concrete syntax rules of the PHUNK style.
 
 ## Casing
 
-The hard syntax rules. They have minimal ambiguity with clear boundaries for
-easier distinction.
+The syntax rules with minimal ambiguity and clear boundaries for easy distinction.
 
-Lowercase namespaces are deliberate against the usual PascalCase to avoid the ambiguity with types. Snake case for properties makes the distinction between methods more clear.
+> [!NOTE]   
+> Lowercase namespaces are deliberate against the usual PascalCase to avoid the ambiguity with types.
+
+> [!NOTE]   
+> Array key casing applies only to keys you define; external keys (DB columns, JSON, headers) keep their source casing.
 
 | Construct                     | Casing             | Example          |
 | ----------------------------- | ------------------ | ---------------- |
@@ -25,6 +25,7 @@ Lowercase namespaces are deliberate against the usual PascalCase to avoid the am
 | Type, enum                    | `PascalCase`       | `Status`         |
 | Type, enum case               | `PascalCase`       | `Status::Active` |
 | Namespace                     | `snake_case`       | `app\order_book` |
+| Array key, string             | `snake_case`       | `'order_line'`   |
 | Constant                      | `UPPER_SNAKE_CASE` | `MAX_SIZE`       |
 | Goto label                    | `UPPER_SNAKE_CASE` | `PARSE_END`      |
 
@@ -36,33 +37,36 @@ Treat acronyms as words: first letter cased per the rule, the rest lowercase.
 - `parseXmlId()`, not `parseXMLID()`
 - `$user_id`, not `$user_iD`
 
-In a constant an acronym may stay uppercase: `MAX_HTTP_RETRIES`.
-
-This governs names you define. Built-in and third-party names keep their source
-casing, the same as external array keys: write `\PDO`, `\PDOStatement`, and PSR
-interfaces as their authors spell them, even where the casing breaks this rule.
-
-### Array keys
-
-String keys you define use `snake_case`: `['order_line' => $x]`. This covers only
-keys the codebase owns (config, internal shapes, return contracts). Keys from an
-external source (database columns, JSON/API payloads, `$_SERVER`, HTTP headers)
-keep the source's casing.
+Built-in and third-party that break this keep their source casing, we can't do much about that.
 
 ## Naming Things
 
-It's difficult, but prioritize naming and flow: if code reads naturally, comments are mostly for non-obvious constraints.
+Some say it's the most difficult thing in programming. In any case, try to prioritize naming and flow: if code reads naturally, comments are mostly for non-obvious constraints.
 
 ### Choosing a name
 
-Try to avoid abbreviations where applicable, exceptions being loop counter. For examle, write `$buffer`, not `$buf`. Use a concept per name, and avoid reusing a name for two concepts in one scope.
+Try to avoid abbreviations where applicable, exceptions being things like loop counters. As an examle, you should write `$buffer`, not `$buf`. Use a concept per name, and avoid reusing a name for two concepts in one scope.
+
+Long explicit names like `account_import_validate_rows` are doing their job: it says exactly what the function is and stays searchable. Don't always worry much about length, especially for internal use. Even a stupidly long and explicit name can be fine in some cases.
 
 Keep related names at similar length when practical: balanced names are easier to scan side by side. Append units by descending significance so related names group: `$latency_ms_max`, `$size_bytes_total`.
 
+You may ponder this graph of name length discoverability:
+
+![Naming discoverability chart](./assets/naming-things-discoverability.webp)
+
+### Aligning assignments
+
+Aligning `=` within a small group of related assignments is fine when it aids scanning; this is why balanced names matter.
+
+Keep it local to a contiguous block and don't align across blank lines or unrelated statements, and don't let one long outlier force wide padding on its neighbors (rename or split it out instead).
+
+It's a nicety, not a requirement.
+
+### Example
+
 ```php
-//
 // Good pairings (similar length, easier to scan)
-//
 $min_latency_ms = 12;
 $max_latency_ms = 47;
 
@@ -72,9 +76,7 @@ $output_bytes_total = 2048;
 $read_count_total  = 18;
 $write_count_total = 21;
 
-//
 // Avoid mixed-length pairings when practical
-//
 $min_latency_ms = 12;
 $max_lat        = 47;
 
@@ -85,38 +87,34 @@ $reads             = 18;
 $write_count_total = 21;
 ```
 
-### Aligning assignments
-
-Aligning `=` within a small group of related assignments is fine when it aids
-scanning; this is why balanced names matter. Keep it local to a contiguous
-block; don't align across blank lines or unrelated statements, and don't let one
-long outlier force wide padding on its neighbors (rename or split it out
-instead). It's a nicety, not a requirement; never block a change over it.
-
 ## Organizing functions
 
-The casing rules above are syntax: follow them. What follows is a recommendation
-for how to organize free functions, not a hard rule. For the fuller treatment of
-modules, see [MODULES.md](MODULES.md).
+The casing rules above are syntax: follow them. What follows is a recommendation for how to organize free functions. For the fuller treatment of modules, see [MODULES.md](MODULES.md).
+
+### Splitting into helpers
+
+A function past ~70 lines probably carries more than one responsibility. It can be a good idea to split it into helpers so the parent reads as prose: a short sequence of named steps you follow top to bottom, each step's detail one level down.
+
+The exception can be a hot path where the call itself is the cost. PHP function calls are not free, and in a tight loop the overhead of jumping into a helper can outweigh the clarity it buys.
 
 ### Subject-prefixed functions
 
 Place free functions in a module namespace, then prefix each function with its subject type so APIs stay grouped by module and by name.
 
-If splitting a large function into more readable parts; keep single-caller helpers grouped under their parent caller by prefixing with the parent name.
+Helpers from a split follow the same rule: keep a single-caller helper grouped under its parent by prefixing with the parent's name.
 
-**Function Scope Tips**:
+### Subject scope tips
 
 - Single caller: keep parent prefix (`account_import_validate_rows`) and mark `#[Internal(Scope::File)]`.
 - Multiple callers in one module: drop the parent prefix (`account_validate_rows`) and mark `#[Internal]`.
 - Callers across modules: make it a public module API and keep a clear subject prefix.
 
+### Example
+
 ```php
 namespace app\ledger;
 
-//
 // In module app\ledger, account_* reads as one family and stays greppable.
-//
 final class Account
 {
     public int $id = 0;
@@ -136,39 +134,37 @@ function account_import(array $rows): int
 #[Internal(Scope::File)]
 function account_import_validate_rows(array $rows): array
 {
-    //
     // Scoped to account_import: keep the parent prefix for locality.
-    //
     return $rows;
 }
 
 #[Internal(Scope::File)]
 function account_import_persist_rows(array $rows): int
 {
-    //
     // Scoped to account_import: keep the parent prefix for locality.
-    //
     return count($rows);
 }
 ```
 
 ## Control flow and safety
 
-Simple, explicit control flow. No recursion unless the problem is inherently
-recursive and depth is limited.
+Keep control flow explicit, the same assembly line you can read top to bottom.
 
-Prefer `match` over `switch`: strict comparison, returns a value, throws on an
-unhandled case. Add a default arm only for a genuine fallback. Split compound
-conditions into nested branches, not `&&`/`||` chains. Brace every block.
+### Branching
 
-Use `assert()` for invariants that must never fail in correct code: bugs, not
-errors (`zend.assertions = 1` in dev and CI, `-1` in production). Never assert
-boundary input; that needs guards that always run.
+Reach for `match` over `switch`: it compares strictly, returns a value, and throws on a case you forgot, where `switch` falls through silently. Add a default arm only for a genuine fallback. Split compound conditions into nested branches rather than `&&`/`||` chains, so stepping through shows which test failed, and brace every block. Avoid recursion unless the problem is inherently recursive and its depth is bounded.
 
-Handle every error; never discard an exception or ignore a return value. Expected
-failures (not found, validation failed, insufficient balance) are domain outcomes:
-return `null`, a typed result, or a `[value, error]` pair. Unexpected failures
-(dropped connection, disk full, corrupted state) throw.
+### Assertions
+
+Use `assert()` for invariants that must never fail in correct code: bugs, not bad input. For performance you can set (`zend.assertions = 1` in dev and CI, `-1` in production). Never assert on boundary input, since assertions compile out; anything from outside needs a guard that always runs.
+
+### Errors
+
+Handle every error; never discard an exception or ignore a return value. Expected failures (not found, validation failed, insufficient balance) are domain outcomes: put them in the return type so the contract is checked, not commented. One obvious failure is a nullable return (`?Account`); several distinct failures the caller branches on are a result enum and a union return (`Account|AccountError`). Reserve exceptions for the genuinely unexpected (dropped connection, full disk, corrupted state).
+
+A thrown exception here is a panic, not control flow: it unwinds to the top of the request or tick, gets logged, and aborts that one unit of work without taking down the server. Nothing on the path between catches it to recover, so anything a caller is meant to handle must be a value, not a throw.
+
+This is the edge over a `@throws` docblock: a union return type is a real type PHP and the analyzer both read, where `@throws` is an advisory note the language never enforces.
 
 ```php
 // bad: throws for an expected outcome, forcing callers into try/catch for control flow
@@ -192,9 +188,49 @@ function account_find(\PDO $db, int $id): ?Account
 }
 ```
 
-A function past ~70 lines probably carries more than one responsibility; extract
-helpers. Declare variables at the narrowest scope, initialized at declaration
-unless the assignment is conditional.
+When there is more than one failure mode, name them in an enum and return a union, so the failures live in the signature and a `match` over the result stays exhaustive:
+
+```php
+enum AccountError
+{
+    case NotFound;
+    case Frozen;
+    case InsufficientFunds;
+}
+
+// The failure modes are part of the return type: no docblock needed
+function account_debit(\PDO $db, int $id, int $amount_cents): Account|AccountError
+{
+    $account = account_find($db, $id);
+    if ($account === null) {
+        return AccountError::NotFound;
+    }
+    if ($account->frozen) {
+        return AccountError::Frozen;
+    }
+    if ($account->balance_cents < $amount_cents) {
+        return AccountError::InsufficientFunds;
+    }
+
+    $account->balance_cents -= $amount_cents;
+    return $account;
+}
+
+function account_debit_page(\PDO $db, int $id, int $amount_cents): Response
+{
+    $result = account_debit($db, $id, $amount_cents);
+    return match (true) {
+        $result instanceof Account                   => render_balance($result),
+        $result === AccountError::NotFound           => http_404(),
+        $result === AccountError::Frozen             => http_409('account frozen'),
+        $result === AccountError::InsufficientFunds  => http_402(),
+    };
+}
+```
+
+### Variable scope
+
+Declare each variable at the narrowest scope that fits, initialised where you declare it unless the assignment is conditional, so a reader never meets a name before its value.
 
 ## Data design
 

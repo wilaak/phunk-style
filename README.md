@@ -12,11 +12,11 @@ In this style we will favor free functions, use less abstraction/encapsulation a
 
 For lack of a better term we will call it a procedural style in which programs can be thought of as a set of assembly lines where data is loaded at one end with various stations along the line to manipulate it to the other end.
 
-Being explicit about your code like this will not only make the computer have a better time understanding it, you will too. Many of these ideas are not novel and are battle-tested in systems that already run under heavy load.
+Being explicit about your code like this will not only make the computer have a better time understanding it, but you will too. The ideas explored are not novel, many are battle-tested in systems that already run under heavy load.
 
 # It's all about that data
 
-Boiled down, a program is just transforming data from one form into another. Essentially a program can be thought of as a set of assembly lines where data is loaded at one end with various stations along the line to manipulate it to the other end.
+Boiled down, a program is just transforming data from one form into another. In essence, any program can be thought of as a set of assembly lines where data is loaded at one end with various stations along the line to manipulate it to the other end.
 
 Sometimes it may not feel like that, though. With enough abstraction, frameworks and deep object graphs the data flow tends dissapear under machinery, and you follow call stacks instead of the data. That disconnect is the abstractions hiding the line, not the program lacking one and the first move is to make the line more explicit again.
 
