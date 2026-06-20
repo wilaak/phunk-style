@@ -259,6 +259,8 @@ god object, not a fat struct. See [The fat struct](chapters/06-classes.md#the-fa
 
 ## State and values
 
+> Give a man a state and he'll have a bug one day, but teach him to represent state in two separate locations that have to be kept in sync and he'll have bugs for a lifetime.
+
 Never duplicate a variable to remember a value: two sources of truth diverge.
 Compute or pass it, close to where it is used. Consolidate mutation: the fewer
 points that can write a value, the easier it is to reason about. When a value's
