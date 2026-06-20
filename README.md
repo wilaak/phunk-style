@@ -1,48 +1,54 @@
-# <img alt="Phunk" width="200" src="./assets/phunk.svg">
+# <img alt="Phunk" width="200" src="./assets/phunk-text.svg">
 
 *This is a draft of the PHUNK PHP coding style guidelines and is heavily a W.I.P with many rough edges!*
 
-Related docs: [MODULES.md](MODULES.md) for code organization, [OPTIMIZATIONS.md](OPTIMIZATIONS.md) for more PHP specific optimization tips.
+Related docs: [STYLE.md](STYLE.md) for the concrete syntax rules, [MODULES.md](MODULES.md) for code organization, [OPTIMIZATIONS.md](OPTIMIZATIONS.md) for more PHP specific optimization tips.
 
 # Introduction
 
-The primary motivation for this guide is to make it more practical to write larger and better performing stateful application servers with low latency and high throughput using PHP, but many principles can be applied elsewhere too.
+The primary motivation for this coding style guide is to make it more practical to write complex and efficient stateful application servers with low latency and high throughput, using but not limited to PHP.
 
-In this style we will favor free functions, use less abstractions and focus more on how we store and transform our data. We will use namespaces as modules and classes are used more sparingly instead of the default unit of abstraction.
+In this style we will favor free functions, use less abstraction/encapsulation and focus more on how we store and transform our data. We will use namespaces as [modules](MODULES.md) and classes are used more sparingly instead of the default unit of abstraction.
 
-For lack of a better term we will call it a procedural style: programs can be thought of as a set of assembly lines where data is loaded at one end with various stations along the line to manipulate it to the other end.
+For lack of a better term we will call it a procedural style in which programs can be thought of as a set of assembly lines where data is loaded at one end with various stations along the line to manipulate it to the other end.
 
-Structuring your code like this will make your computer have a better time understanding it and consequently its not unlikely that you will too.
+Being explicit about your code like this will not only make the computer have a better time understanding it, you will too. Many of these ideas are not novel and are battle-tested in systems that already run under heavy load.
 
 # It's all about that data
 
-Alright, so what is a program really? If you boil it down, all a program is doing is transforming data. Essentially, a program can be thought of as a set of assembly lines where data is loaded at one end with various stations along the line to manipulate it to the other end.
+Boiled down, a program is just transforming data from one form into another. Essentially a program can be thought of as a set of assembly lines where data is loaded at one end with various stations along the line to manipulate it to the other end.
 
-If something is computable, it is ultimately a data transformation. Programs can be broadly categorized by the primary kind of data transformation they perform:
+Sometimes it may not feel like that, though. With enough abstraction, frameworks and deep object graphs the data flow tends dissapear under machinery, and you follow call stacks instead of the data. That disconnect is the abstractions hiding the line, not the program lacking one and the first move is to make the line more explicit again.
+
+If something is computable, it's ultimately a data transformation. Programs can be broadly categorized by the primary kind of data transformation they perform:
 
 - Servers transform network requests into responses.
 - Interactive apps transform state based on user input.
 - Simulations and games transform state from input and clock ticks.
-- Processing jobs transform arguments and file data into output, then exit.
+- Processing jobs transform arguments and file data into output.
 
 That is essentially every program ever written, so writing a correct one is mostly a matter of transforming its data correctly. Some of those transformations are trivial; others are fiendishly complex, threading many steps and a great deal of state from input to output.
 
-The assembly line is what keeps even the complex ones tractable: when correct input gives a wrong result, you bisect the line to find the stage at fault. This works recursively, too, since if A, B, and C are right but D is wrong, you bisect D's substages the same way.
+The ideal then is to be as explicit about how we transform our data as we can be. An explicit assembly line keeps complex transformations more tractable: when correct input gives a wrong result, you bisect the line to find the stage at fault. This works recursively, too, since if A, B, and C are right but D is wrong, you bisect D's substages the same way.
+
+In contrast, behavior spread across objects calling objects, a method calling a method calling a method, has no single order to walk and so harder to bisect: a wrong result could be anywhere in the web. That is what many OOP styles grow into, see [Why not just use classes?](#why-not-just-use-classes).
+
+Moving data through the line in bulk is also the shape the hardware runs fastest, since flat data processed in sequence beats scattered objects chased one at a time, see [Working with the machine](#working-with-the-machine). Nothing is a silver bullet, the assembly line style has some recurring issues of its own, see [Assembly line pitfalls](#assembly-line-pitfalls).
+
+Sometimes it can be useful to visualize your program as if you were playing Factorio:
 
 ![Factorio Is Literally Just Programming GIF](./assets/factorio-we-do-a-little.gif)
 
-It pays off twice over. Moving data through the line in bulk is also the shape the hardware runs fastest, since flat data processed in sequence beats scattered objects chased one at a time (see [Working with the machine](#working-with-the-machine)).
+# Assembly line pitfalls
 
-## Assembly line pitfalls
-
-Nothing is a silver bullet, of course. The assembly line brings recurring pitfalls of its own, here are some:
+Four recur, taken in turn below:
 
 - [Scattered state](#scattered-state)
 - [Leaky functions](#leaky-functions)
 - [Tangled data](#tangled-data)
 - [Stretched context](#stretched-context)
 
-### Scattered state
+## Scattered state
 
 > [!TIP]
 > Consolidate each value's mutations into as few stages as possible.
@@ -53,7 +59,7 @@ Often this is just a matter of reordering the logic so the writes sit together. 
 
 That is an extra name to track, but it tells the truth about what the value is.
 
-### Leaky functions
+## Leaky functions
 
 > [!TIP]
 > A function should touch only the state passed to it.
@@ -74,7 +80,7 @@ Full purity is a large demand with costs of its own. You gain most of the benefi
 
  Loggers and allocators are stateful in the strict sense, but not in ways that corrupt your logic, so reaching for them as globals is fine.
 
-### Tangled data
+## Tangled data
 
 > [!TIP]
 > Design the data on its own terms, before the code.
@@ -90,7 +96,7 @@ Working procedurally, you can interrogate a design before any code exists:
 - Does this need to be stored at all, or can it be recomputed when needed?
 - Can this hierarchy or graph be flattened into an array?
 
-### Stretched context
+## Stretched context
 
 > [!TIP]
 > Some logic lives across runs, not inside one.
@@ -101,7 +107,7 @@ It is also harder to test. A step debugger sees only one run; debugging across m
 
 Both pressures point the same way: holding state across runs, and replaying it to debug, both want a single place where the state lives and one point where it advances. A loop gives you exactly that.
 
-## A loop at the center
+# A loop at the center
 
 > [!TIP]
 > Run the assembly line on a fixed cadence, advancing all state in one place.
@@ -128,11 +134,14 @@ use app\{
 //
 function world_tick(env\Env $env, World $world, float $dt): void
 {
-    $events = net\drain($env->net);    // gather: everything buffered since last tick
+    // gather: everything buffered since last tick
+    $events = net\drain($env->net);
 
-    world_step($world, $events, $dt);  // decide: advance the whole batch in one pass
+    // decide: advance the whole batch in one pass
+    world_step($world, $events, $dt);
 
-    net\flush($env->net, $world);      // commit: write results back
+    // commit: write results back
+    net\flush($env->net, $world);
 }
 ```
 
@@ -146,6 +155,10 @@ $server->on('message', static fn ($conn, $msg) => net\buffer($env->net, $conn, $
 $tick_ms = 50;
 Timer::tick($tick_ms, static fn () => world\world_tick($env, $world, $tick_ms / 1000));
 ```
+
+All of this assumes a coroutine runtime like Swoole. I/O there is cooperative: a database query or service call in the gather or commit looks blocking but yields, so the scheduler parks that coroutine and runs others instead of stalling the process. You write straight-line code and the runtime does the waiting, with no callbacks or promises threaded through it.
+
+The gather, decide, commit shape is what keeps that safe. The only thing that yields is I/O, and it sits at the edges; the decide in the middle is pure and gives up control to no one, so no other coroutine interleaves partway through advancing the state. Cooperative concurrency without the usual races, because the one place state changes never yields.
 
 Advancing all the state in one timed place pays off three ways.
 
@@ -205,328 +218,9 @@ The rest of the field settled elsewhere. Go, Rust, Zig, and Odin organize code b
 
 Once you account for memory and lifetime like this, PHP handles work it was never thought suited for: persistent services, real-time systems, game servers. The aim is simply to make that practical, through better organization and the performance that follows.
 
-# Actual Style Guide
-
-## Naming things
-
-Prioritize naming and flow: if code reads naturally, comments are mostly for non-obvious constraints.
-
-### Casing
-
-The casing rules have minimal ambiguity with clear boundaries for easier distinction.
-
-| Construct                          | Casing            | Example              |
-| ---------------------------------- | ----------------- | -------------------- |
-| Variable                           | `snake_case`      | `$order_line`        |
-| Property                           | `snake_case`      | `$created_at`        |
-| Parameter                          | `snake_case`      | `int $row_count`     |
-| Namespace                          | `snake_case`      | `app\order_book`     |
-| Class, interface, trait, enum      | `PascalCase`      | `OrderLine`          |
-| Enum case                          | `PascalCase`      | `Status::Active`     |
-| Method                             | `camelCase`       | `getTotal()`         |
-| Free function                      | `snake_case`      | `order_total()`      |
-| Constants                          | `UPPER_SNAKE_CASE`| `MAX_SIZE`           |
-| Goto label                         | `UPPER_SNAKE_CASE`| `PARSE_END`          |
-
-### Subject-prefixed functions
-
-Place free functions in a module namespace, then prefix each function with its subject type so APIs stay grouped by module and by name.
-
-If splitting a large function into more readable parts; keep single-caller helpers grouped under their parent caller by prefixing with the parent name.
-
-**Function Scope Tips**:
-
-- Single caller: keep parent prefix (`account_import_validate_rows`) and mark `#[Internal(Scope::File)]`.
-- Multiple callers in one module: drop the parent prefix (`account_validate_rows`) and mark `#[Internal]`.
-- Callers across modules: make it a public module API and keep a clear subject prefix.
-
-For more about modules, see [MODULES.md](MODULES.md).
-
-```php
-namespace app\ledger;
-
-//
-// In module app\ledger, account_* reads as one family and stays greppable.
-//
-final class Account
-{
-    public int $id = 0;
-}
-
-function account_can_debit(Account $account, int $amount_cents): bool
-{
-    return $amount_cents >= 0;
-}
-
-function account_import(array $rows): int
-{
-    $rows_validated = account_import_validate_rows($rows);
-    return account_import_persist_rows($rows_validated);
-}
-
-#[Internal(Scope::File)]
-function account_import_validate_rows(array $rows): array
-{
-    //
-    // Scoped to account_import: keep the parent prefix for locality.
-    //
-    return $rows;
-}
-
-#[Internal(Scope::File)]
-function account_import_persist_rows(array $rows): int
-{
-    //
-    // Scoped to account_import: keep the parent prefix for locality.
-    //
-    return count($rows);
-}
-```
-
-### Choosing a name
-
-Try to avoid abbreviations where applicable, exceptions being loop counter. For examle, write `$buffer`, not `$buf`. Use a concept per name, and avoid reusing a name for two concepts in one scope.
-
-Keep related names at similar length when practical: balanced names are easier to scan side by side. Append units by descending significance so related names group: `$latency_ms_max`, `$size_bytes_total`.
-
-```php
-//
-// Good pairings (similar length, easier to scan)
-//
-$min_latency_ms = 12;
-$max_latency_ms = 47;
-
-$input_bytes_total  = 1024;
-$output_bytes_total = 2048;
-
-$read_count_total  = 18;
-$write_count_total = 21;
-
-//
-// Avoid mixed-length pairings when practical
-//
-$min_latency_ms = 12;
-$max_lat        = 47;
-
-$in_bytes_total     = 1024;
-$output_bytes_total = 2048;
-
-$reads             = 18;
-$write_count_total = 21;
-```
-
-### Acronyms
-
-Treat acronyms as words: first letter cased per the rule, the rest lowercase.
-
-- `HttpClient`, not `HTTPClient`
-- `parseXmlId()`, not `parseXMLID()`
-- `$user_id`, not `$user_iD`
-
-In a constant an acronym may stay uppercase: `MAX_HTTP_RETRIES`.
-
-This governs names you define. Built-in and third-party names keep their source
-casing, the same as external array keys: write `\PDO`, `\PDOStatement`, and PSR
-interfaces as their authors spell them, even where the casing breaks this rule.
-
-### Array keys
-
-String keys you define use `snake_case`: `['order_line' => $x]`. This covers only
-keys the codebase owns (config, internal shapes, return contracts). Keys from an
-external source (database columns, JSON/API payloads, `$_SERVER`, HTTP headers)
-keep the source's casing.
-
-### Aligning assignments
-
-Aligning `=` within a small group of related assignments is fine when it aids
-scanning; this is why balanced names matter. Keep it local to a contiguous
-block; don't align across blank lines or unrelated statements, and don't let one
-long outlier force wide padding on its neighbors (rename or split it out
-instead). It's a nicety, not a requirement; never block a change over it.
-
-## Control flow and safety
-
-Simple, explicit control flow. No recursion unless the problem is inherently
-recursive and depth is limited.
-
-Prefer `match` over `switch`: strict comparison, returns a value, throws on an
-unhandled case. Add a default arm only for a genuine fallback. Split compound
-conditions into nested branches, not `&&`/`||` chains. Brace every block.
-
-Use `assert()` for invariants that must never fail in correct code: bugs, not
-errors (`zend.assertions = 1` in dev and CI, `-1` in production). Never assert
-boundary input; that needs guards that always run.
-
-Handle every error; never discard an exception or ignore a return value. Expected
-failures (not found, validation failed, insufficient balance) are domain outcomes:
-return `null`, a typed result, or a `[value, error]` pair. Unexpected failures
-(dropped connection, disk full, corrupted state) throw.
-
-```php
-// bad: throws for an expected outcome, forcing callers into try/catch for control flow
-function account_find(\PDO $db, int $id): Account
-{
-    $row = account_row($db, $id);
-    if ($row === null) {
-        throw new NotFoundException();
-    }
-    return account_of_row($row);
-}
-
-// good: return null; the caller branches on it
-function account_find(\PDO $db, int $id): ?Account
-{
-    $row = account_row($db, $id);
-    if ($row === null) {
-        return null;
-    }
-    return account_of_row($row);
-}
-```
-
-A function past ~70 lines probably carries more than one responsibility; extract
-helpers. Declare variables at the narrowest scope, initialized at declaration
-unless the assignment is conditional.
-
-## Data design
-
-Design the data on its own terms before the code that uses it; code shaped first
-drags the data into needless relationships and redundancy. Interrogate every
-structure:
-
-- Is this the most compact encoding? Denormalize only with a stated reason.
-- Are these linkages necessary? Prefer a key or index over a pointer or reference,
-  so the two structures change independently.
-- Must this be stored, or can it be recomputed when needed?
-- Can this hierarchy or graph be flattened into an array?
-
-Flat data is easier to understand, change, and keep mutation under control; linked
-structures couple their owners. Carry data in structs of public typed fields with
-behavior as free functions taking the struct first. Avoid arrays of mixed types;
-use a typed value object or named return struct (shapes in [MODULES.md](MODULES.md)).
-
-## State and values
-
-Never duplicate a variable to remember a value: two sources of truth diverge.
-Compute or pass it, close to where it is used. Consolidate mutation: the fewer
-points that can write a value, the easier it is to reason about. When a value's
-role changes as it flows, introduce a fresh, honestly named value (`$slug`, then
-`$slug_normalized`) rather than reusing one mutated variable.
-
-Prefer the simplest return type that expresses the outcome:
-
-```
-void > bool > int > ?int > value-or-exception
-```
-
-## Off-by-one
-
-Index, count, and size are distinct:
-
-| Concept | Meaning              | Conversion                          |
-|---------|----------------------|-------------------------------------|
-| Index   | Zero-based offset    | index + 1 = count for a single item |
-| Count   | Number of items      | count * unit_bytes = size_bytes     |
-| Size    | Byte or unit measure |                                     |
-
-Name accordingly: `$node_index`, `$node_count`, `$buffer_size_bytes`. When
-dividing integers, comment whether you intend truncation, floor, or ceiling.
-
-## Comments
-
-Comments explain why, not what; well-named identifiers say what. Comment a hidden
-constraint, a non-obvious invariant, a workaround, or surprising behavior. Keep
-them terse.
-
-Documentation that belongs to a symbol goes in a `/** */` docblock, so the IDE
-surfaces it on hover and PHPStan or Psalm check it. A function earns one when its
-contract is not visible in its signature: a precondition, an invariant, or an order
-it must run in:
-
-```php
-/**
- * Reads the version without rechecking it. Callers must hold the account lock;
- * a concurrent write would otherwise be lost. Cheap, since the row is already pinned.
- */
-function account_version(Account $account): int
-{
-    return $account->version;
-}
-```
-
-The other case is a type PHP cannot state: an array's element layout, a packed
-buffer's stride, or a local closure's signature. The docblock carries it in
-PHPStan/Psalm notation, which the analyzer and IDE read:
-
-```php
-/**
- * @param list<float>         $points  Flat [lat, lng, lat, lng, ...]; stride 2.
- * @param \Closure(int): bool $keep    Local predicate over a point index.
- */
-function points_filter(array $points, \Closure $keep): array
-```
-
-A `\Closure` is fine for a local callback; a callback that is a published contract
-should be a single-method interface, which types the signature natively (see
-[MODULES.md](MODULES.md), No premature abstraction).
-
-Document non-obvious properties the same way. A struct-of-arrays whose columns are
-flat-packed with a stride earns a `@var` per field carrying the type PHP cannot
-express and the layout:
-
-```php
-/**
- * Particle pool, struct-of-arrays. Every column is indexed by slot 0..count-1;
- * the i-th particle is the i-th element of each. Scalars only, no per-particle
- * object, so iteration stays a packed sequential read (OPTIMIZATIONS.md).
- */
-final class ParticlePool
-{
-    public int $count = 0;
-
-    /** @var list<float> Flat [x, y, x, y, ...]; stride 2, two floats per particle. */
-    public array $position = [];
-
-    /** @var list<int> One packed RGBA per particle: (r << 24) | (g << 16) | (b << 8) | a. */
-    public array $color = [];
-}
-```
-
-Use `//` for the rest: the why behind a line, end-of-line notes, section markers.
-Prose after `//` takes a space, a capital, a full stop; end-of-line notes may be
-short phrases without punctuation. Mark sections with a bordered block:
-
-```php
-//
-// Helpers
-//
-```
-
-No `/* */` for inline notes. Use standard keyboard characters only: `->` not an
-arrow glyph, straight quotes, no em-dashes. Where a sentence wants an em-dash,
-rephrase it with a colon, a comma, or two sentences. No markdown outside docblocks.
-
-## Formatting
-
-Defer to PER Coding Style. Key points:
-
-- 4 spaces per indent. No tabs.
-- Line length 100 columns recommended; exceed only when breaking hurts more.
-- One class, interface, trait, or enum per file.
-- Opening brace on its own line for classes, methods, functions; same line for
-  control structures. Braces always.
-- `declare(strict_types=1);` at the top of every file.
-- One blank line after the namespace and after the `use` block, and between
-  functions. Trailing commas in multi-line arrays and argument lists.
-
-## Dependencies
-
-Prefer none. Every dependency is a supply-chain risk, an upgrade burden, and a
-surprise; before adding one, ask whether you can own the functionality directly.
-When one is necessary, pin the version.
-
-## Enforcement
-
-PHP-CS-Fixer or PHP_CodeSniffer (`PER`/`PSR12`) for formatting. Identifier casing
-here is project policy, not covered by the standards, so add custom sniffs if you
-want it enforced.
+# The style guide
+
+The conceptual case is the hard part; the syntax that follows from it is
+mechanical by comparison. To keep this document focused on the why, the concrete
+rules: casing, naming, control flow, data design, comments, and formatting, live
+in their own reference: [STYLE.md](STYLE.md).

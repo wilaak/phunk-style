@@ -6,7 +6,7 @@ functions taking the struct first. Call sites read as a verb on data:
 `cpu\step($cpu)`, `bus\read8($bus, $addr)`.
 
 This covers how code is wired: modules, files, visibility, the loader, the DAG,
-the environment. The data-pipeline thinking it rests on, and local naming
+the environment. The assembly-line thinking it rests on, and local naming
 conventions, are in [README.md](README.md); hot-path rules in
 [OPTIMIZATIONS.md](OPTIMIZATIONS.md).
 
@@ -543,14 +543,14 @@ use app\{
 function serve(env\Env $env, \Swoole\Http\Request $req, \Swoole\Http\Response $res): void
 {
     $request  = http\request_parse($req);     // edge: framework type -> our Request
-    $response = handle($env, $request);        // pipeline: Request -> Response
+    $response = handle($env, $request);        // assembly line: Request -> Response
     http\response_write($res, $response);      // edge: our Response -> framework type
 }
 ```
 
 `$server->on('request', ...)` is inversion of control: the framework owns the loop.
 Swoole's HTTP server gives no other shape, so keep the callback a one-line adapter
-and the inside an explicit value pipeline. `serve` parses the framework request
+and the inside an explicit value assembly line. `serve` parses the framework request
 into our `Request`, runs it to a `Response`, writes back, with `\Swoole\Http\*`
 confined to its signature; below `serve` everything sees `Request` in, `Response`
 out: `response = handle(request)`. When you own the loop instead, write a loop, not

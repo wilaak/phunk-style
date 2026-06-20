@@ -1,28 +1,43 @@
 # The factory model
 
 > [!NOTE]
-> This is an exploratory sketch, not settled style. It builds on the assembly-line
-> idea from [README.md](README.md) and asks: if a program is a set of assembly
-> lines, what if we described the whole factory as data and ran it with one small
-> engine? The payoff would be a system you can monitor and visualize for free. The
-> rules in [MODULES.md](MODULES.md) and [OPTIMIZATIONS.md](OPTIMIZATIONS.md) still
-> apply; this only adds a way to wire stations together.
+> This is an exploratory sketch, not settled style. The assembly-line approach in
+> [README.md](README.md) is good on its own. This document asks what a small set of
+> rules for *doing* it would add, and the answer is discoverability: a fixed, tiny
+> vocabulary for the parts of a line, so you can read what a program does and how its
+> data flows without opening a single function body. The data-as-table, the engine,
+> and the monitoring further down are payoffs of following those rules, not the
+> point. The conventions in [MODULES.md](MODULES.md) and
+> [OPTIMIZATIONS.md](OPTIMIZATIONS.md) still apply.
 
 ## The idea
 
-[README.md](README.md) frames every program as an assembly line: data in one end,
-stations along the way, a result out the other. The loop section drives one such
-line on a timer. This document generalizes that to a graph of lines and makes one
-claim:
+[README.md](README.md) frames every program as an assembly line, data in one end,
+stations along the way, a result out the other, and argues it is easier to reason
+about than a web of objects. That holds on its own. It gets much better with a few
+conventions for the parts of a line, because then the structure is legible from the
+outside:
 
 > [!TIP]
-> Describe the factory as data, run it with one small engine, and monitoring and
-> visualization fall out instead of being bolted on.
+> Name the parts of an assembly line from a fixed, tiny vocabulary, and you can read
+> the flow of a whole program without reading its code.
 
-The shared thing between stations is not a base class. It is a uniform function
-signature and a flat table that lists the stations and the belts between them. The
-topology is data you can print, diff, hot-swap, and draw. The work inside a station
-is ordinary concrete code.
+Most of the rules are just naming. A few more let the line be described as data,
+which is what later makes it monitorable and drawable. But discoverability is the
+reason: a new engineer should be able to walk the factory floor and follow the belts
+before opening anything. The shared thing between stations is a signature and a flat
+table, not a base class.
+
+## Rules at a glance
+
+- Every function is a station with one of five roles, named by a verb-suffix:
+  Source, Step, Sink, Router. Buffers are nouns.
+- A Step is pure. Effects live only at the boundary stations, Source and Sink,
+  never mid-line.
+- State lives only in Buffers. Everything between them is a pure belt.
+- The line's shape is described as data, a flat station table, not wired in code.
+- One engine drives the table, so there is one place to measure the whole system.
+- A line is driven, not self-driving: it exposes `step`, and the host owns the clock.
 
 ## Stations and belts
 
@@ -30,17 +45,19 @@ A station has one job. The vocabulary is fixed and small, on purpose: a fixed
 alphabet is what makes a factory legible at a glance. Each role is a verb-suffix on
 the usual subject-prefixed name (see [README.md](README.md) naming rules).
 
-| Factorio | Station | Role                                   | Reads like                      |
-| -------- | ------- | -------------------------------------- | ------------------------------- |
-| Miner    | Source  | pulls buffered input onto the line     | `net\drain`, `queue\take`       |
-| Inserter | Edge    | crosses a boundary: raw to typed       | `request_parse`, `frame_write`  |
-| Assembler| Step    | transforms a batch, pure               | `world_step`, `view_render`     |
-| Splitter | Router  | partitions or filters a batch onward   | `cmd_route`, `event_partition`  |
-| Chest    | Buffer  | holds a batch between stations (a noun) | `World`, `Inbox`, `Outbox`     |
+| Factorio  | Station | Role                                     | Reads like                     |
+| --------- | ------- | ---------------------------------------- | ------------------------------ |
+| Miner     | Source  | brings input onto the line, raw to typed | `net\drain`, `request_parse`   |
+| Assembler | Step    | transforms a batch, pure                 | `world_step`, `view_render`    |
+| Loader    | Sink    | sends output off the line, typed to raw  | `net\flush`, `response_write`  |
+| Splitter  | Router  | partitions or filters a batch onward     | `cmd_route`, `event_partition` |
+| Chest     | Buffer  | holds a batch between stations (a noun)  | `World`, `Inbox`, `Outbox`     |
 
-The spine is three: Source, Step, Sink (gather, decide, commit). Router and Buffer
-are what you add once the line branches or carries state across ticks, which is
-exactly when a program grows too large to hold in your head.
+The spine is three: Source, Step, Sink (gather, decide, commit). Parsing raw input
+into typed values, and serializing it back, lives in the Source and Sink, at the
+ends, never mid-line. Router and Buffer are what you add once the line branches or
+carries state across ticks, which is exactly when a program grows too large to hold
+in your head.
 
 > [!NOTE]
 > Five is the budget, not a starting point. If a station is not one of these, it is
@@ -155,6 +172,196 @@ The generic dispatch is per-tick, never per-element. Inside a station's `$run` t
 work is a tight, concrete, inlined loop over a flat array, so the hot-path rules in
 [OPTIMIZATIONS.md](OPTIMIZATIONS.md) still hold: generic at the coarse grain for
 legibility, concrete at the fine grain for speed.
+
+## A worked example: a stateful HTTP service
+
+Enough in the abstract. Here is a small but real server built from stations: an
+in-memory leaderboard behind an HTTP API. Writes mutate shared state, so it is the
+stateful case the loop is for, not a stateless endpoint you would leave reactive.
+
+The shared state, and the typed write that rides the belt:
+
+```php
+namespace app\score;
+
+use Swoole\Coroutine\Channel;
+
+// The shared state. Mutated only by the tick, so there are no locks.
+final class Leaderboard
+{
+    /** @var array<string, int> player name -> total points */
+    public array $points = [];
+}
+
+// A buffered write. Carries its reply channel, so the tick can resume the request
+// coroutine that is parked waiting for the result.
+final class Submit
+{
+    public string  $player = '';
+    public int     $points = 0;
+    public Channel $reply;
+}
+
+final class SubmitResult
+{
+    public int $rank  = 0;
+    public int $total = 0;
+}
+```
+
+The three stations, the Source, Step, Sink spine. The Step is the only writer of the
+board, so all mutation lives in one place:
+
+```php
+namespace app\score;
+
+use Swoole\Coroutine\Channel;
+
+//
+// STEP (the single writer): apply the whole batch to the board, then compute each
+// reply. Mutates the Leaderboard passed in; returns the replies to send.
+//
+/**
+ * @param  list<Submit>                    $batch
+ * @return list<array{Channel, SubmitResult}>
+ */
+function leaderboard_apply(Leaderboard $board, array $batch): array
+{
+    $replies = [];
+    foreach ($batch as $submit) {
+        $board->points[$submit->player] =
+            ($board->points[$submit->player] ?? 0) + $submit->points;
+
+        $result        = new SubmitResult();
+        $result->total = $board->points[$submit->player];
+        $result->rank  = leaderboard_rank($board, $submit->player);
+
+        $replies[] = [$submit->reply, $result];
+    }
+    return $replies;
+}
+
+#[Internal]
+function leaderboard_rank(Leaderboard $board, string $player): int
+{
+    $mine = $board->points[$player] ?? 0;
+    $rank = 1;
+    foreach ($board->points as $points) {
+        if ($points > $mine) {
+            $rank++;
+        }
+    }
+    return $rank;
+}
+
+//
+// SINK: resume each parked request coroutine with its result. The push is what
+// wakes the coroutine waiting in the HTTP handler.
+//
+/** @param list<array{Channel, SubmitResult}> $replies */
+function replies_send(array $replies): void
+{
+    foreach ($replies as [$channel, $result]) {
+        $channel->push($result);
+    }
+}
+```
+
+The tick is the line, three stages in order:
+
+```php
+namespace app\score;
+
+use app\factory;
+
+//
+// One tick: gather the writes buffered since last tick, apply them in one pass as
+// the only writer, resume the waiting requests. Reads never enter here.
+//
+function score_tick(Leaderboard $board, factory\Buffer $inbox): void
+{
+    $batch   = factory\buffer_drain($inbox);        // Source: writes buffered this tick
+    $replies = leaderboard_apply($board, $batch);   // Step:   the only writer of $board
+    replies_send($replies);                         // Sink:   wake the request coroutines
+}
+```
+
+The composition root wires it under Swoole. The per-request callback stays a thin
+adapter: parse, buffer, await, write.
+
+```php
+namespace app;
+
+use app\{
+    factory,
+    score,
+};
+use Swoole\Coroutine\Channel;
+
+$board = new score\Leaderboard();
+$inbox = new factory\Buffer();
+
+$server = new \Swoole\Http\Server('0.0.0.0', 8080);
+
+// One worker owns the state: a single writer needs a single process. Scale by
+// sharding players across workers, never by sharing the board (see the gaps below).
+$server->set(['worker_num' => 1]);
+
+$server->on('request', static function ($req, $res) use ($inbox, $board) {
+    $method = $req->server['request_method'];
+    $path   = $req->server['request_uri'];
+
+    // A write: parse it, drop it on the inbox belt, park until the tick answers.
+    if ($method === 'POST' && $path === '/score') {
+        $body = \json_decode($req->rawContent(), true);
+
+        $submit         = new score\Submit();
+        $submit->player = (string) $body['player'];
+        $submit->points = (int) $body['points'];
+        $submit->reply  = new Channel(1);
+
+        factory\buffer_fill($inbox, [$submit]);
+        $result = $submit->reply->pop();
+
+        $res->header('Content-Type', 'application/json');
+        $res->end(\json_encode(['rank' => $result->rank, 'total' => $result->total]));
+        return;
+    }
+
+    // A read: served straight from state. Safe because the tick is the only writer
+    // and never yields mid-apply, so the board is never seen half-updated.
+    if ($method === 'GET' && $path === '/leaderboard') {
+        $res->header('Content-Type', 'application/json');
+        $res->end(\json_encode($board->points));
+        return;
+    }
+
+    $res->status(404);
+    $res->end();
+});
+
+// Own the loop: a 5 ms tick advances all shared state in one place.
+$server->on('workerStart', static function () use ($board, $inbox) {
+    \Swoole\Timer::tick(5, static fn () => score\score_tick($board, $inbox));
+});
+
+$server->start();
+```
+
+Follow one request through it. A POST coroutine parses the body, drops a `Submit` on
+the inbox, and parks on its reply channel. The next tick drains the batch, applies it
+to the board as the only writer, and pushes each result back, waking the parked
+coroutine to write its response. The request's in-flight state lives on its own
+coroutine stack, so there is no pending-request table to keep: the coroutine answer
+to "Stretched context". Reads skip the line entirely.
+
+What it bought: every write to the board happens in one place, on a fixed cadence, so
+there are no locks, "who changed this" has one answer, and rate limiting, batching,
+and metrics attach to the tick instead of to every handler. What it cost: up to one
+tick of latency on a write. For a stateless endpoint that is pure overhead, so handle
+it in the coroutine and skip the loop. The model earns its keep once requests share
+state and must stay consistent, the way a matching engine, a rate limiter, or a game
+lobby does.
 
 ## A drivable loop
 
@@ -389,6 +596,51 @@ rewiring an object graph:
   observability serving debugging and capacity, not vanity.
 - Per-tick generic dispatch is cheap, but do not let the generic driver leak into
   the per-element loop inside a station. Coarse grain generic, fine grain concrete.
+
+## What a real application still needs
+
+The model above is a happy-path skeleton. The honest gaps, roughly in the order they
+bite a production system:
+
+- Errors and partial failure. The line assumes every item is good and every Step
+  succeeds. A real Source ingests malformed input and a real Step throws on one item
+  in a batch, and neither should drop the batch or stall the line. This wants a
+  failure channel: a dead-letter belt, per-item error results, and a retry or poison
+  policy.
+- Long I/O within a station. A station that makes a slow external call should not
+  stall the tick. Under a coroutine runtime (Swoole, assumed throughout) this is
+  mostly handled for you: spawn a coroutine for the call and let it drop its result
+  onto a buffer when it lands, picked up on a later tick. The coroutine's own stack
+  holds the in-flight state, so there is no manual state machine of pending requests
+  to maintain. The model's one rule still holds: the pure decide must not yield, so
+  I/O stays in the Source, the Sink, and spawned workers, never mid-advance.
+- Bounded buffers and real backpressure. Belts are unbounded arrays; a Source faster
+  than its Step grows one without limit until memory runs out. Production belts need
+  a bound and a policy when full (block the Source, drop, or spill), with the
+  consumed count `step` returns feeding admission control.
+- Durability and recovery. State lives in memory, so a crash loses every Buffer. A
+  real system snapshots state, logs its input ahead of processing (the record and
+  replay the loop already hints at), and replays idempotently on restart.
+- Keyed ordering and per-key state. Batching interleaves items, but many domains need
+  per-key order (per connection, per account) and isolated per-key state. This wants
+  a Router that partitions by key into per-key Buffers, plus a guarantee that one
+  key's items keep their order.
+- Scaling past one core. One loop is one core. Real throughput shards the work across
+  many loops by key, which raises the question the single-loop model dodges: how
+  shards exchange data, and how a key's state moves when they rebalance.
+- Exactly-once-enough commit. Writing output and acknowledging input are two effects a
+  crash can split, double-processing or losing work. The Sink needs a transactional
+  boundary, idempotency keys, or the outbox pattern, none of which the sketch covers.
+- Lifecycle and change. Nothing here covers graceful shutdown (drain in-flight, flush
+  buffers), hot reconfiguration, adding or removing stations at runtime, or evolving
+  the shape of data on a belt across a rolling upgrade.
+- Tracing one item. The metrics count throughput but cannot answer "what happened to
+  message X." That needs a correlation id riding with each item and structured logs
+  across the stations it visits.
+
+These are not reasons to abandon the model, they are its next design problems, and
+several have a natural home in it: errors as a belt, completions as a Source, keys as
+a Router. Naming them is the point. The sketch is the skeleton, not the system.
 
 ## How it fits the rest
 
