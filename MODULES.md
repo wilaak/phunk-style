@@ -276,8 +276,8 @@ A header you cannot write in three lines means the module owns more than one nou
 
 PHP has no struct type, so a `final class` of public typed fields stands in for
 one. It is a record, not an object: just fields passed by reference, the way the
-languages this style draws from use structs (see [README.md](README.md), "Why not
-just use classes?"). The class only names a record type the IDE understands.
+languages this style draws from use structs (see [Why not just use
+classes?](chapters/05-classes.md)). The class only names a record type the IDE understands.
 
 PHP passes object handles, so this needs no ceremony: a struct given to a function
 is the caller's instance, and mutating its fields is visible to the caller, like
@@ -556,7 +556,7 @@ confined to its signature; below `serve` everything sees `Request` in, `Response
 out: `response = handle(request)`. When you own the loop instead, write a loop, not
 a callback, and for a stateful service make it a batched tick. That architecture,
 and the monitoring and rate limiting that fall out of it, is in
-[README.md](README.md), "A loop at the center".
+[A loop at the center](chapters/03-loop.md).
 
 Selecting an implementation is constructing a different value at step 2: a real
 `\PDO` or a fake, `clock\FixedClock` instead of `clock\SystemClock`. The handler is
@@ -613,4 +613,4 @@ count, and that count is a design choice. The module-as-namespace style keeps it
 low: a fat struct with free functions is one node where idiomatic OOP has a dozen
 objects, so the graph wires in plain code at the root, with no container to hide the
 sprawl. Why fine-grained objects cost more than they save is in
-[README.md](README.md), "Why not just use classes?".
+[Why not just use classes?](chapters/05-classes.md).

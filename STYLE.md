@@ -249,6 +249,14 @@ structures couple their owners. Carry data in structs of public typed fields wit
 behavior as free functions taking the struct first. Avoid arrays of mixed types;
 use a typed value object or named return struct (shapes in [MODULES.md](MODULES.md)).
 
+Default to wide, public structs grouped by access pattern, not narrow ones split by
+"responsibility": fields read and written together in the same stages belong in the
+same struct. Going wide is what lets a cross-cutting pass (logging, validation,
+serialization, snapshot) be one function over the whole record instead of something
+threaded through every type. A wide struct stays safe only under write
+consolidation, many stages reading a field and few writing it; without that it is a
+god object, not a fat struct. See [The fat struct](chapters/05-classes.md#the-fat-struct).
+
 ## State and values
 
 Never duplicate a variable to remember a value: two sources of truth diverge.

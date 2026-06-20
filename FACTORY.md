@@ -373,8 +373,8 @@ need a shared way to be driven.
 > A loop is driven, not self-driving. It exposes a `step`, and the host owns the
 > clock.
 
-A self-driving loop, one that owns its own `Timer::tick` (see [README.md](README.md),
-"A loop at the center"), cannot be embedded or tested. Invert it: expose `step` and
+A self-driving loop, one that owns its own `Timer::tick` (see [A loop at the
+center](chapters/03-loop.md)), cannot be embedded or tested. Invert it: expose `step` and
 let whoever hosts the loop decide when to call it. The interop surface is three
 things you already have, an inbox, an outbox, and `step`:
 
@@ -455,7 +455,7 @@ What the contract unlocks:
 - One set of tools. Any monitor, visualizer, or replayer works on any loop, because
   all of them expose the same inbox, outbox, and stats.
 - Deterministic tests. Record the inbox, drive `step` with a fixed `dt`, diff the
-  outbox. The record-and-replay [README.md](README.md) "Stretched context" asked
+  outbox. The record-and-replay [Stretched context](chapters/02-pitfalls.md#stretched-context) asked
   for, now standard.
 
 > [!NOTE]
@@ -647,7 +647,7 @@ a Router. Naming them is the point. The sketch is the skeleton, not the system.
 The factory model is not a new architecture so much as three things the other docs
 already describe, seen as one:
 
-- The loop ([README.md](README.md), "A loop at the center") is the driver.
+- The loop ([A loop at the center](chapters/03-loop.md)) is the driver.
 - Modules ([MODULES.md](MODULES.md)) own stations and the buffers between them; a
   module's public stations are its surface.
 - The composition root builds the station table the same way it builds the
