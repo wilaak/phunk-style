@@ -1,5 +1,7 @@
 <img alt="Phunk" width="120" src="../assets/phunk-text.svg">
 
+---
+
 ## It's all about that data
 
 If you boil it down, a program is just transforming data from one form into another. In essence, any program can be thought of as a set of assembly lines where data is loaded at one end with various stations along the line to manipulate it to the other end.

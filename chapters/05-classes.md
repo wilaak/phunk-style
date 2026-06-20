@@ -1,5 +1,7 @@
 <img alt="Phunk" width="120" src="../assets/phunk-text.svg">
 
+---
+
 ## Why not just use classes?
 
 So far the case has been for what to do: think in assembly lines, give a stateful program a loop. This section is the other half, why the PHP default works against both. PHP makes the class the default unit of nearly everything: the thing you model, the file you put on disk, the unit the autoloader pulls in. For short-lived request work that is fine. For a long-lived, high-throughput server it quietly works against you on two fronts: it scatters the structure of the program, and it scatters the data in memory.

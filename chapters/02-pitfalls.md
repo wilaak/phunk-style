@@ -1,5 +1,7 @@
 <img alt="Phunk" width="120" src="../assets/phunk-text.svg">
 
+---
+
 ## Assembly line pitfalls
 
 Not everything is a silver bullet.

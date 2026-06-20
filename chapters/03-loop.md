@@ -1,5 +1,7 @@
 <img alt="Phunk" width="120" src="../assets/phunk-text.svg">
 
+---
+
 ## A loop at the center
 
 > [!TIP]

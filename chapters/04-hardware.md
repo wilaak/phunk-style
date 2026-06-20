@@ -1,5 +1,7 @@
 <img alt="Phunk" width="120" src="../assets/phunk-text.svg">
 
+---
+
 ## Working with the machine
 
 A short aside on hardware, because it is the reason flat data and batches keep coming up. You do not need any of it to follow the rules, but it makes them feel less arbitrary.
