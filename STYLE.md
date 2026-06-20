@@ -255,7 +255,7 @@ same struct. Going wide is what lets a cross-cutting pass (logging, validation,
 serialization, snapshot) be one function over the whole record instead of something
 threaded through every type. A wide struct stays safe only under write
 consolidation, many stages reading a field and few writing it; without that it is a
-god object, not a fat struct. See [The fat struct](chapters/05-classes.md#the-fat-struct).
+god object, not a fat struct. See [The fat struct](chapters/06-classes.md#the-fat-struct).
 
 ## State and values
 

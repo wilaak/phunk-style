@@ -1,19 +1,11 @@
 # Code organization
 
-The unit of modularity is the namespace, not the class. A module is a namespace
-plus the data it operates on: structs of public typed fields, behavior as free
-functions taking the struct first. Call sites read as a verb on data:
-`cpu\step($cpu)`, `bus\read8($bus, $addr)`.
-
-This covers how code is wired: modules, files, visibility, the loader, the DAG,
-the environment. The assembly-line thinking it rests on, and local naming
-conventions, are in [README.md](README.md); hot-path rules in
-[OPTIMIZATIONS.md](OPTIMIZATIONS.md).
+A module is a namespace.
 
 ## Rules at a glance
 
-- A module is a namespace: one flat word under a vendor root, flat by default.
-  The directory mirrors it.
+- A module is a namespace: one flat word under a vendor root. The directory
+  mirrors it.
 - Data is public typed fields; behavior is free functions taking the struct
   first, prefixed with its type name.
 - Import the namespace, not the symbol; keep the prefix at the call site.
@@ -28,17 +20,14 @@ conventions, are in [README.md](README.md); hot-path rules in
 ## Modules
 
 A module is the namespace that owns a family of data types and the operations over
-them. The data is its identity and the functions follow: `ledger` owns `Account`
-and `TransferStatus`, and `account_debit` lives there because `Account` does. A few
-modules own operations rather than types, a cohesive set of functions over
-primitives or foreign types (`util`, an `http` edge owning only its mapping);
-modules too, by the same tests.
+them: `ledger` owns `Account`, `Transfer`, and `TransferStatus` across several
+files, and `account_debit` lives there because `Account` does. A few modules own
+operations rather than types, a cohesive set of functions over primitives or
+foreign types (`util`, an `http` edge owning only its mapping).
 
-Err coarse. A module is a cohesive subsystem, not a single type: `ledger` holds
-`Account`, `Transfer`, and `TransferStatus` across several files, not a namespace
-each. A namespace per class is the over-fragmentation to avoid, since it breeds the
-wiring sprawl a container exists to manage. As coarse as stays one cohesive
-subsystem; split only when a genuinely independent one emerges.
+Err coarse: a module is a cohesive subsystem, not a single type. A namespace per
+class is the over-fragmentation to avoid; it breeds the wiring sprawl a container
+exists to manage. Split only when a genuinely independent subsystem emerges.
 
 Name a module for its role as the prefix on every call into it (`ledger\transfer`):
 
@@ -48,12 +37,11 @@ Name a module for its role as the prefix on every call into it (`ledger\transfer
   `Account`. The module prefix carries the subsystem, the function prefix the type
   (`account_debit`); they need not match.
 - It must read as a prefix: `store\account_load()`, `http\request_parse()`.
-  Awkward pairing means the name is wrong.
 - No dumping grounds (`common`, `shared`, `helpers`, `misc`, `core`); `util` is the
   one tolerated operation-module name.
 - No stutter or vendor echo: not `app\ledger_module`, not `ledger\ledger_transfer`.
 
-Three questions decide a boundary, each answerable without taste:
+Three questions decide a boundary:
 
 - Name. One noun, the type family it owns? If the name needs an `and`, two modules.
 - Change. One reason to change? Two reasons, two modules.
@@ -69,14 +57,10 @@ The grains, smallest to largest:
 - Package: one or more modules that lift out together with their own config and
   deps. The unit of reuse.
 
-A module is a namespace under a vendor root, `vendor\module`; the vendor root
-avoids collisions with third-party code. Each module is one flat word below it:
-`app\cpu`, `app\ledger`. Past `vendor\module`, another `\` means two modules, not a
-submodule, unless it is the grouping tier. The directory mirrors the namespace
-(`app\cpu` in `app/cpu/`); the loader requires files recursively, so the folder
-matches the module name.
-
-A module is a flat directory of files, all in the same namespace:
+A module is a namespace under a vendor root, `vendor\module`; each module is one
+flat word below it: `app\cpu`, `app\ledger`. Past `vendor\module`, another `\`
+means two modules, not a submodule, unless it is the grouping tier. The directory
+mirrors the namespace (`app\cpu` in `app/cpu/`).
 
 ```
 src/
@@ -95,34 +79,17 @@ src/
 
 Many files in one directory is the goal. A tree of near-empty directories hides the
 module and adds path noise; add a directory only when a genuinely independent
-module emerges.
+module emerges. Files in one module call each other unqualified.
 
 Flat is the default, not absolute. Three or more independent modules of the same
 kind (codecs, hashes, backends) may share one grouping tier: `app\encoding\json`,
-`app\encoding\csv`. The group is a directory, not a module, with no functions,
-classes, or constants, no behavior, and sharing it grants no visibility
-(`app\encoding\json` cannot reach `app\encoding\csv`'s `#[Internal]` symbols). Call
-sites stay flat: `use app\encoding\json;` then `json\decode()`, never an
-`encoding\json\` chain. Group horizontal families (one noun in variations); keep
-vertical layers flat: `app\api`, `app\ledger`, `app\store` stack in the DAG, not
-the path, never `app\domain\ledger`. One tier only. If you cannot name the family
-as N variations on one noun, it is not a group.
-
-Files in one module call each other unqualified. The file boundary is where you
-cut, not a wall: a growing file becomes more files in the same namespace, never a
-new module. Reserve a new namespace for genuinely independent code.
-
-This is Odin's package model in PHP. A module is Odin's package: a directory
-sharing one `namespace`, imported by path, referenced by prefix, default-public
-with `#[Internal]`/`Scope::File` mirroring `@(private)`/`@(private="file")`; free
-functions over structs and the flat layout are the same. PHP forces three
-differences. Import and loading are decoupled: `use` only aliases, so a separate
-loader does what Odin's compiler does from `import`. Visibility is not
-language-enforced; the attribute is inert until a linter checks it. A PHP "struct"
-is a heap class, not a value type, so the dense layouts in
-[OPTIMIZATIONS.md](OPTIMIZATIONS.md) recover by hand what Odin gives natively. We
-add the no-cycle DAG (Odin permits cycles), type-prefixed function names, and an
-explicit `$env` where Odin threads an implicit `context`.
+`app\encoding\csv`. The group is a directory, not a module: no behavior, and
+sharing it grants no visibility (`app\encoding\json` cannot reach
+`app\encoding\csv`'s `#[Internal]` symbols). Call sites stay flat:
+`use app\encoding\json;` then `json\decode()`. Group horizontal families (one noun
+in variations); keep vertical layers flat: `app\api`, `app\ledger`, `app\store`
+stack in the DAG, not the path. One tier only. If you cannot name the family as N
+variations on one noun, it is not a group.
 
 ## The loader
 
@@ -132,8 +99,8 @@ no lazy per-class loading. One file requires every source file once, recursively
 ```php
 <?php
 
-// Requires every PHP file under this directory, recursively. Used in favor of
-// PSR-4: dependencies resolved once at startup, not lazily per class on a hot path.
+// Requires every PHP file under this directory, recursively. Dependencies
+// resolved once at startup, not lazily per class on a hot path.
 
 $directory = __DIR__;
 
@@ -153,8 +120,7 @@ another module at require time, so a file may reference a symbol declared later.
 Two things would break this, both already disallowed:
 
 - Class inheritance across files: `class B extends A` fails if `A` is not yet
-  loaded. The style prefers flat data and composition (see "No premature
-  abstraction").
+  loaded. The style prefers flat data and composition.
 - Top-level executable code: modules declare, they do not run. Ordered bootstrap
   belongs in the entry point.
 
@@ -164,8 +130,7 @@ Require the loader once at the entry point, then wire and run.
 
 Import the namespace, not the symbol: `use app\util;` then `util\clamp()`. The
 prefix names the origin and keeps the API greppable; `use function` and `use const`
-strip it and are forbidden. Class imports (`use app\ledger\Account;`) are fine,
-as the class name still carries meaning.
+strip it and are forbidden. Class imports (`use app\ledger\Account;`) are fine.
 
 ```php
 // bad: symbol import strips the origin
@@ -178,7 +143,7 @@ $v = util\clamp($x, $lo, $hi);
 ```
 
 Group imports sharing a vendor in one multi-line `use`, one per line, trailing
-comma:
+comma. Reserve the group form for two or more from one vendor:
 
 ```php
 use app\{
@@ -189,24 +154,11 @@ use app\{
 };
 ```
 
-Reserve the group form for two or more from one vendor; a single import stays one
-line.
+Alias only to resolve a collision, never to shorten, and keep the origin in the
+alias so it stays greppable:
 
-Alias only to resolve a collision, never to shorten; a vanity alias hides the
-origin the prefix exists to show. Two cases warrant `as`:
-
-- Leaf-name collision: `use acme\json as acme_json;`, keeping the origin in the
-  alias, then `acme_json\decode()`.
+- Leaf-name collision: `use acme\json as acme_json;` then `acme_json\decode()`.
 - Class-name collision: `use app\ledger\Account as LedgerAccount;`.
-
-Alias inside a group the same way, origin-revealing so it stays greppable:
-
-```php
-use app\{
-    ledger,
-    store as ledger_store,
-};
-```
 
 Never alias to a short arbitrary token (`use app\ledger as l;`); that strips
 context like `use function`.
@@ -226,11 +178,8 @@ enum Scope
 - `#[Internal]`: module-private, the default, visible to every file in the
   namespace, invisible outside.
 - `#[Internal(Scope::File)]`: file-private. Rare.
+- Unmarked is public API.
 
-`Scope::Module`, not `Scope::Package`: a module is one namespace, the unit this
-scopes to; a package (the liftable cluster of modules) is a different grain.
-Unmarked is public API. One attribute models visibility as a single ordered axis:
-the linter reads the scope and `match`es, and a new level later is one more case.
 The attribute is a token-linter marker, never reflected, so it needs no backing
 class; the linter fails the build on a boundary-crossing call at zero runtime cost.
 
@@ -238,11 +187,7 @@ class; the linter fails the build on a boundary-crossing call at zero runtime co
 
 A module advertises how to use it. The public surface is small by construction:
 the unmarked symbols, everything else `#[Internal]`. The primary file (named after
-the module) opens with a terse header:
-
-- Purpose: the one noun it owns, in a sentence.
-- Public API: the unmarked entry points, grouped by type.
-- Dependencies: the modules below it in the DAG. None for a leaf.
+the module) opens with a terse header listing purpose, public API, dependencies:
 
 ```php
 namespace app\ledger;
@@ -257,16 +202,13 @@ namespace app\ledger;
 //
 ```
 
-The header is the contract; the `#[Internal]` attributes enforce it, and the linter
-is the source of truth when they drift. Keep it a map, not prose.
-
-Three checkable properties make a boundary honest:
+The header is the contract; the `#[Internal]` attributes enforce it. Three
+checkable properties make a boundary honest:
 
 - Self-contained. Everything from outside arrives through a signature: data as
   arguments, capabilities through `$env`. No reach into another module's
   `#[Internal]` symbols, no global mutable state.
-- One direction. The dependency list points down the DAG only; a name in two
-  modules' lists pointing at each other is a misplaced boundary.
+- One direction. The dependency list points down the DAG only.
 - Stable surface. The public list changes only when the contract does; refactoring
   internals never touches the header.
 
@@ -275,19 +217,16 @@ A header you cannot write in three lines means the module owns more than one nou
 ## Data as structs
 
 PHP has no struct type, so a `final class` of public typed fields stands in for
-one. It is a record, not an object: just fields passed by reference, the way the
-languages this style draws from use structs (see [Why not just use
-classes?](chapters/05-classes.md)). The class only names a record type the IDE understands.
-
-PHP passes object handles, so this needs no ceremony: a struct given to a function
-is the caller's instance, and mutating its fields is visible to the caller, like
-passing a struct by reference, with no `&` needed (reserve `&` for reassigning the
-variable or for scalars and arrays; see [OPTIMIZATIONS.md](OPTIMIZATIONS.md)). Pass
-the struct first instead of binding behavior into methods.
+one. It is a record, not an object: just fields passed by reference. PHP passes
+object handles, so a struct given to a function is the caller's instance, and
+mutating its fields is visible to the caller, with no `&` needed (reserve `&` for
+reassigning the variable or for scalars and arrays; see
+[OPTIMIZATIONS.md](OPTIMIZATIONS.md)). Pass the struct first instead of binding
+behavior into methods.
 
 This is for the few module-level instances with identity and a lifecycle, not bulk
-data in hot loops; for that a class is the wrong tool, so pack fields into arrays or
-a byte buffer ([OPTIMIZATIONS.md](OPTIMIZATIONS.md)).
+data in hot loops; for that, pack fields into arrays or a byte buffer
+([OPTIMIZATIONS.md](OPTIMIZATIONS.md)).
 
 ```php
 namespace app\ledger;
@@ -314,7 +253,7 @@ function account_deposit(Account $account, int $amount_cents): void
 ```
 
 Prefix functions with the type name so grepping `account` returns the API. Never
-bind behavior into methods or hide fields behind accessors:
+bind domain behavior into methods or hide fields behind accessors:
 
 ```php
 // bad: behavior in methods, state behind getters and setters
@@ -336,20 +275,17 @@ function account_deposit(Account $account, int $amount_cents): void
 }
 ```
 
-Prefer free functions for behavior over your own data, a preference, not a
-prohibition. PHP is an object language; do not fight that, least of all at the
-boundary. Reach for a method where it is the idiom or reads better:
+This is a preference, not a prohibition. PHP is an object language; reach for a
+method where it is the idiom or reads better:
 
 - Framework/library integration: a Swoole server, a PSR interface, where you call
   `$server->on(...)` because that is the API.
-- Genuinely object-like state: a connection, a buffer, an open file, an iterator,
-  a few instances with a lifecycle, not bulk data.
+- Genuinely object-like state: a connection, a buffer, an open file, an iterator.
 - Small value objects, where one or two natural methods carry no hidden state.
 
-The rule targets where domain behavior lives (free functions over structs, not
-getters and setters), not the `->` operator. A class of public fields with the
-occasional method is fine; one that hides fields and scatters logic across methods
-is the thing to avoid. Convenience sometimes wins; spend the exception where it pays.
+The rule targets where domain behavior lives, not the `->` operator. A class of
+public fields with the occasional method is fine; one that hides fields and
+scatters logic across methods is the thing to avoid.
 
 ## Functional core, imperative shell
 
@@ -370,16 +306,16 @@ to the core, take the decision back, then write. No I/O interleaved with logic.
 // shell: reads inputs, calls the pure core, writes outputs. Holds $env.
 function transfer_handle(env\Env $env, transfer\Request $request): transfer\Result
 {
-    $from = store\account_load($env->db, $request->from_id);   // gather
-    $to   = store\account_load($env->db, $request->to_id);
+    $from = store\account_load($env->database, $request->from_id);   // gather
+    $to   = store\account_load($env->database, $request->to_id);
 
     $status = ledger\transfer($from, $to, $request->amount_cents);   // decide (pure)
     if ($status !== ledger\TransferStatus::Ok) {
         return transfer\reject($status);
     }
 
-    store\account_save($env->db, $from);   // commit
-    store\account_save($env->db, $to);
+    store\account_save($env->database, $from);   // commit
+    store\account_save($env->database, $to);
     return transfer\accept();
 }
 ```
@@ -388,21 +324,25 @@ Keeping the decision pure makes it testable without a database and keeps
 irreversible writes in one auditable place. No globals; shared infrastructure
 travels through `$env`. Pass a function only the data it needs.
 
-A recommendation, not a rule: prefer commands to return `void` and queries to be
-pure. The exception stays welcome: an operation that both mutates and reports, a
-command-query. `ledger\transfer` mutates two accounts and returns a
-`TransferStatus`; `account_save` writes and returns whether it committed. Each is
-honest because every effect is in the signature. What it bans is the dishonest
-case: a hidden effect behind something shaped like a query.
+Prefer commands to return `void` and queries to be pure, but a command-query that
+both mutates and reports is welcome when every effect is in the signature
+(`ledger\transfer` mutates two accounts and returns a `TransferStatus`). What this
+bans is a hidden effect behind something shaped like a query.
 
 Modules form a DAG: shell modules sit above core and call down. Two siblings never
 import each other; an operation needing both belongs in the layer above.
 
+## Cross-container operations
+
+When one operation coordinates two containers from the same module (a transfer
+between two accounts), give it a function taking both as explicit arguments, in the
+module that owns the types. An operation spanning two modules belongs in the layer
+above both, never inside either.
+
 ## Application environment
 
 For application-wide dependencies (database, logger, clock, config), use a
-`readonly` class built once at startup, the justified exception to avoid-objects:
-one instance, never iterated.
+`readonly` class built once at startup: one instance, never iterated.
 
 ```php
 namespace app\env;
@@ -412,7 +352,7 @@ use app\clock\Clock;
 final readonly class Env
 {
     public function __construct(
-        public \PDO                     $db,
+        public \PDO                     $database,
         public \Psr\Log\LoggerInterface $logger,
         public Clock                    $clock,   // now(): \DateTimeImmutable; stubbed in tests
         public Config                   $config,
@@ -421,29 +361,33 @@ final readonly class Env
 ```
 
 `$clock` is a one-method `Clock` interface, not a `\Closure`: it carries a real
-signature and stubs in tests (see "No premature abstraction"). Build `$env` at the
-composition root and pass it to the outermost layer that needs it; inner functions
-receive only what they need, extracted at the call site.
+signature and stubs in tests. Build `$env` at the composition root and pass it to
+the outermost layer that needs it; inner functions receive only what they need.
 
-## Cross-container operations
+### Past one application
 
-When one operation coordinates two containers from the same module (a transfer
-between two accounts), give it a function taking both as explicit arguments, in the
-module that owns the types. An operation spanning two modules belongs in the layer
-above both, never inside either.
+The single `$env` is right for one application. As packages multiply, do not grow
+it into a god object; each package exports its own narrow pair:
+
+- `Config`: pure data, serializable, loadable from a file. URLs, ports, timeouts,
+  flags.
+- `Deps`: capabilities, constructed in code. A database handle, a clock, an HTTP
+  client.
+
+When wiring grows long, give each package one `pkg\boot(Config): Deps`, so the root
+stays a linear list of `$x = pkg\boot($config)` calls.
 
 ## No premature abstraction
 
-Do not extract an interface or base class over data or a service until a concrete
-limitation forces it. One implementation needs none; the JIT devirtualizes a call
-it proves single-target. Add an interface only when two implementations must be
+Do not extract an interface or base class until a concrete limitation forces it.
+One implementation needs none; the JIT devirtualizes a call it proves
+single-target. Add an interface only when two implementations must be
 interchangeable, or a boundary needs mocking in tests.
 
 Function-typed parameters cut the other way. PHP has no type for a function
-signature (`\Closure` and `callable` accept any arity and return), so a
-callback's contract escapes the type system, the IDE, and the analyzer. A
-single-method interface *is* that signature, named and checkable; for a contract
-callback it is the only way to type it:
+signature (`\Closure` and `callable` accept any arity and return), so a callback's
+contract escapes the type system. A single-method interface *is* that signature,
+named and checkable:
 
 ```php
 // bad: the parameter types carry no signature; the contract lives in a comment
@@ -461,14 +405,9 @@ interface DuePolicy
 function schedule(Clock $clock, DuePolicy $on_due): void { /* ... */ }
 ```
 
-A one-method interface is also right for a mockable capability such as a clock or
-an HTTP client, the "boundary needs mocking" case.
-
 Reserve `\Closure` for a local callback whose signature is obvious and not a
 published contract, with a `\Closure(...)` docblock so PHPStan checks it. `callable`
-is weakest (it also accepts strings and arrays); avoid it. On a hot path the choice
-is moot: drop the per-element callback and inline the work
-([OPTIMIZATIONS.md](OPTIMIZATIONS.md)).
+is weakest (it also accepts strings and arrays); avoid it.
 
 ## Composition root
 
@@ -477,23 +416,14 @@ one file, where the module graph is assembled by hand. It alone reads the
 environment, calls `new`, and chooses implementations. Everything below receives
 what it needs through signatures. One root per executable.
 
-Because the root *is* the dependency graph written out, it doubles as the map you
-explore from. Two load-bearing conventions:
-
-- One canonical entry file: `server.php` at the root, `bin/<name>` per worker. A
-  reader knows where to start.
+- One canonical entry file: `server.php` at the root, `bin/<name>` per worker.
 - DAG order, top to bottom: config, then leaf capabilities, then `$env`, then the
   shell. Reading top-down reads the dependency layering.
-
-Two more: the `use` block is the index of what the app is composed of; no logic in
-the root, only construction and wiring. With the module-boundary headers, the root
-shows the graph top-down and each header its deps bottom-up, so you walk the app with
-no container, no runtime resolution.
+- The `use` block is the index of what the app is composed of; no logic in the
+  root, only construction and wiring.
 
 Parse config once, here: read the raw environment (`getenv()`, `$_ENV`, a file) and
 validate into a typed `Config`, so a bad value fails at startup, not mid-request.
-
-The whole wiring is the entry file, read top to bottom:
 
 ```php
 require __DIR__ . '/src/loader.php';
@@ -513,14 +443,14 @@ $config = config\from_env();
 
 // 2. Build the long-lived capabilities, the "singletons": plain variables,
 //    constructed once, held for the life of the process.
-$db        = new \PDO($config->dsn, $config->db_user, $config->db_pass, [
+$database = new \PDO($config->dsn, $config->database_user, $config->database_password, [
     \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
 ]);
-$logger    = new \Monolog\Logger('app');
-$the_clock = new clock\SystemClock();   // a test wires clock\FixedClock instead
+$logger   = new \Monolog\Logger('app');
+$clock    = new clock\SystemClock();   // a test wires clock\FixedClock instead
 
 // 3. Assemble the app-wide environment, shared across every request.
-$env = new env\Env($db, $logger, $the_clock, $config);
+$env = new env\Env($database, $logger, $clock, $config);
 
 // 4. Serve. $server is a framework object; call its method API as given. Keep the
 //    closure a thin adapter; the logic lives in a named free function.
@@ -549,68 +479,37 @@ function serve(env\Env $env, \Swoole\Http\Request $req, \Swoole\Http\Response $r
 ```
 
 `$server->on('request', ...)` is inversion of control: the framework owns the loop.
-Swoole's HTTP server gives no other shape, so keep the callback a one-line adapter
-and the inside an explicit value assembly line. `serve` parses the framework request
-into our `Request`, runs it to a `Response`, writes back, with `\Swoole\Http\*`
-confined to its signature; below `serve` everything sees `Request` in, `Response`
-out: `response = handle(request)`. When you own the loop instead, write a loop, not
-a callback, and for a stateful service make it a batched tick. That architecture,
-and the monitoring and rate limiting that fall out of it, is in
-[A loop at the center](chapters/03-loop.md).
+Keep the callback a one-line adapter and the inside an explicit value assembly
+line, with `\Swoole\Http\*` confined to `serve`'s signature; below `serve`
+everything sees `Request` in, `Response` out. When you own the loop instead, write
+a loop, not a callback.
 
 Selecting an implementation is constructing a different value at step 2: a real
 `\PDO` or a fake, `clock\FixedClock` instead of `clock\SystemClock`. The handler is
-unchanged, since it took the capability through its signature (the `Clock`
-interface), so swapping the value swaps the behavior. No registry, no reflection.
+unchanged, since it took the capability through its signature. No registry, no
+reflection.
 
 One hazard the long-lived process adds: shared mutable state across requests. `$env`
 is built once and shared by every request (and every concurrent coroutine), so it
-holds only capabilities, never request data. Per-request values (parsed input, a
-request id, a transaction) are built in the handler and threaded down. Keep `$env`
-`readonly` so the compiler enforces it: a singleton you cannot mutate cannot carry
-per-request state.
-
-### Past one application
-
-The single `$env` is right for one application. As packages multiply, do not grow
-it into a god object; each package exports its own narrow pair:
-
-- `Config`: pure data, serializable, loadable from a file. URLs, ports, timeouts,
-  flags.
-- `Deps`: capabilities, constructed in code. A database handle, a clock, an HTTP
-  client.
-
-A package is self-contained when extractable: no reach into another's internals, no
-global state, everything arriving through its signatures. When wiring grows long,
-give each package one `pkg\boot(Config): Deps`, so the root stays a linear list of
-`$x = pkg\boot($config)` calls, still plain code, never a container.
+holds only capabilities, never request data. Keep `$env` `readonly` so the compiler
+enforces it: a singleton you cannot mutate cannot carry per-request state.
 
 ## Replacing the DI container
 
-A container does three jobs in a request-per-process world: build the object graph
-(autowiring), manage lifetimes (singleton, scoped, transient), resolve by interface
-(service location). The composition root covers all three with plain code, no
-reflection:
+A container builds the object graph, manages lifetimes, and resolves by interface.
+The composition root covers all three with plain code, no reflection:
 
-| Container concept              | Here                                                  |
-| ------------------------------ | ----------------------------------------------------- |
-| Autowiring / graph construction| Plain `new` at the composition root, top to bottom    |
-| Singleton lifetime             | A variable built once at boot, held for process life  |
-| Scoped (per-request) lifetime  | A value built in the request handler, passed down     |
-| Transient lifetime             | Call the constructor where you need it                |
-| Resolve by interface           | Construct the chosen concrete value at the root       |
-| Lazy instantiation             | Eager; a long-lived process pays construction once    |
-| Service location               | Pass the value through the signature                  |
+| Container concept               | Here                                                 |
+| ------------------------------- | ---------------------------------------------------- |
+| Autowiring / graph construction | Plain `new` at the composition root, top to bottom   |
+| Singleton lifetime              | A variable built once at boot, held for process life |
+| Scoped (per-request) lifetime   | A value built in the request handler, passed down    |
+| Transient lifetime              | Call the constructor where you need it               |
+| Resolve by interface            | Construct the chosen concrete value at the root      |
+| Lazy instantiation              | Eager; a long-lived process pays construction once   |
+| Service location                | Pass the value through the signature                 |
 
-The insight a container works around is that a request-per-process runtime rebuilds
-the world each request, so it needs lifetime rules and lazy graphs to amortize
-that. A long-running process does not: build the graph once, hold it for the
-process life, and "singleton" collapses into an ordinary variable. Nothing to
-amortize, nothing to resolve at runtime.
-
-Deeper, a container treats a symptom. The wiring it automates grows with the object
-count, and that count is a design choice. The module-as-namespace style keeps it
-low: a fat struct with free functions is one node where idiomatic OOP has a dozen
-objects, so the graph wires in plain code at the root, with no container to hide the
-sprawl. Why fine-grained objects cost more than they save is in
-[Why not just use classes?](chapters/05-classes.md).
+A container works around a request-per-process runtime that rebuilds the world each
+request, so it needs lifetime rules and lazy graphs to amortize that. A
+long-running process does not: build the graph once, hold it for the process life,
+and "singleton" collapses into an ordinary variable.
