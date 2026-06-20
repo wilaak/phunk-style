@@ -1,12 +1,12 @@
-# <img alt="Phunk" width="150" src="./assets/phunk.svg">
+# <img alt="Phunk" width="200" src="./assets/phunk.svg">
 
-> *PHP PHUNK coding style guide draft*
+*This is a draft of the PHUNK PHP coding style guidelines and is heavily a W.I.P with many rough edges!*
 
-*Related docs: [MODULES.md](MODULES.md) for code organization, [OPTIMIZATIONS.md](OPTIMIZATIONS.md) for optimization tips.*
+Related docs: [MODULES.md](MODULES.md) for code organization, [OPTIMIZATIONS.md](OPTIMIZATIONS.md) for more PHP specific optimization tips.
 
 # Introduction
 
-The primary motivation for this guide is to make it more practical to write larger and better performing stateful application servers with low latency and high throughput using PHP.
+The primary motivation for this guide is to make it more practical to write larger and better performing stateful application servers with low latency and high throughput using PHP, but many principles can be applied elsewhere too.
 
 In this style we will favor free functions, use less abstractions and focus more on how we store and transform our data. We will use namespaces as modules and classes are used more sparingly instead of the default unit of abstraction.
 
@@ -15,6 +15,8 @@ For lack of a better term we will call it a procedural style: programs can be th
 Structuring your code like this will make your computer have a better time understanding it and consequently its not unlikely that you will too.
 
 # It's all about that data
+
+Alright, so what is a program really? If you boil it down, all a program is doing is transforming data. Essentially, a program can be thought of as a set of assembly lines where data is loaded at one end with various stations along the line to manipulate it to the other end.
 
 If something is computable, it is ultimately a data transformation. Programs can be broadly categorized by the primary kind of data transformation they perform:
 
@@ -27,11 +29,13 @@ That is essentially every program ever written, so writing a correct one is most
 
 The assembly line is what keeps even the complex ones tractable: when correct input gives a wrong result, you bisect the line to find the stage at fault. This works recursively, too, since if A, B, and C are right but D is wrong, you bisect D's substages the same way.
 
+![Factorio Is Literally Just Programming GIF](./assets/factorio-we-do-a-little.gif)
+
 It pays off twice over. Moving data through the line in bulk is also the shape the hardware runs fastest, since flat data processed in sequence beats scattered objects chased one at a time (see [Working with the machine](#working-with-the-machine)).
 
-## Pipeline pitfalls
+## Assembly line pitfalls
 
-Nothing is a silver bullet, of course. The pipeline brings recurring pitfalls of its own, here are some:
+Nothing is a silver bullet, of course. The assembly line brings recurring pitfalls of its own, here are some:
 
 - [Scattered state](#scattered-state)
 - [Leaky functions](#leaky-functions)
@@ -45,7 +49,7 @@ Nothing is a silver bullet, of course. The pipeline brings recurring pitfalls of
 
 The more stages that can change a value, the more places you must search when it comes out wrong, and the more hidden purposes it quietly picks up as its meaning shifts from stage to stage.
 
-Often this is just a matter of reordering the logic so the writes sit together. When they genuinely cannot, copy rather than mutate in place: a `slug` whose meaning drifts mid-pipeline becomes `slug` and a transient `slug_normalized`, two honest names instead of one overloaded one.
+Often this is just a matter of reordering the logic so the writes sit together. When they genuinely cannot, copy rather than mutate in place: a `slug` whose meaning drifts partway down the line becomes `slug` and a transient `slug_normalized`, two honest names instead of one overloaded one.
 
 That is an extra name to track, but it tells the truth about what the value is.
 
@@ -91,7 +95,7 @@ Working procedurally, you can interrogate a design before any code exists:
 > [!TIP]
 > Some logic lives across runs, not inside one.
 
-A pipeline reasons cleanly about a single run, but a program's hardest parts often span many: a long-running async task that blocks some interactions until it finishes, a scripted game sequence that plays out over many frames. This state fits in no single event handler or tick, so it needs an explicit home and careful thought.
+An assembly line reasons cleanly about a single run, but a program's hardest parts often span many: a long-running async task that blocks some interactions until it finishes, a scripted game sequence that plays out over many frames. This state fits in no single event handler or tick, so it needs an explicit home and careful thought.
 
 It is also harder to test. A step debugger sees only one run; debugging across many needs recorded input you can replay, which few web frameworks or game engines offer out of the box.
 
@@ -100,15 +104,15 @@ Both pressures point the same way: holding state across runs, and replaying it t
 ## A loop at the center
 
 > [!TIP]
-> Run the pipeline on a fixed cadence, advancing all state in one place.
+> Run the assembly line on a fixed cadence, advancing all state in one place.
 
-Think of the loop as the data pipeline given a heartbeat. A single run is stateless: data in, result out, nothing kept. Run it over and over against state you hold between passes, and you have a program that lives in time instead of forgetting itself after every request.
+Think of the loop as the assembly line given a heartbeat. A single run is stateless: data in, result out, nothing kept. Run it over and over against state you hold between passes, and you have a program that lives in time instead of forgetting itself after every request.
 
-PHP's default is the opposite: a callback fires per request and forgets everything. That is fine when requests are independent, but a stateful server is not, and threading shared state through scattered callbacks is the smeared, hard-to-follow control flow the pipeline was meant to avoid.
+PHP's default is the opposite: a callback fires per request and forgets everything. That is fine when requests are independent, but a stateful server is not, and threading shared state through scattered callbacks is the smeared, hard-to-follow control flow the assembly line was meant to avoid.
 
 Game engines settled this long ago with one loop at the center: each tick, gather the inputs that arrived, advance the whole state by one step, flush the outputs, repeat at a fixed rate. A server fits the same shape. Connections and messages buffer as they arrive, and the per-event callback shrinks to a thin adapter that only appends (see [MODULES.md](MODULES.md), "When you own the loop, write a loop").
 
-The tick is then the gather, decide, commit pipeline a request handler uses, only batched and repeating:
+The tick is then the gather, decide, commit line a request handler uses, only batched and repeating:
 
 ```php
 namespace app\world;
@@ -171,13 +175,13 @@ Flat data plays to both. An array of like values sits contiguous in memory, stre
 
 > *Typical issues with the PHP status quo way of packaging things*
 
-So far the case has been for what to do: think in pipelines, give a stateful program a loop. This section is the other half, why the PHP default works against both. PHP makes the class the default unit of nearly everything: the thing you model, the file you put on disk, the unit the autoloader pulls in. For short-lived request work that is fine. For a long-lived, high-throughput server it quietly works against you on two fronts: it scatters the structure of the program, and it scatters the data in memory.
+So far the case has been for what to do: think in assembly lines, give a stateful program a loop. This section is the other half, why the PHP default works against both. PHP makes the class the default unit of nearly everything: the thing you model, the file you put on disk, the unit the autoloader pulls in. For short-lived request work that is fine. For a long-lived, high-throughput server it quietly works against you on two fronts: it scatters the structure of the program, and it scatters the data in memory.
 
 Splitting a system into small, encapsulated units is good at some scale, but the idea gets pushed until everything is a unit and smaller is always assumed better. The premise is that a smaller unit is easier to get right, which is true on its own. What it forgets is that the correctness of a system lives in how its units fit together, not in each one alone. Concentrated complexity gets traded for scattered complexity, which is harder to follow, so the total goes up rather than down.
 
 Conflating data types with modules makes this worse. When every type has to be its own unit, data and the code over it fracture across odd boundaries: a field is moved to another class because it does not fit the supposed responsibility of the first. The boundaries serve the rule, not the problem.
 
-Object modeling also assumes the world comes pre-divided into neat types, and it rarely does. Real concepts overlap and shift, so you spend energy on where a method belongs and what to name the class that owns it, and the answer keeps moving as the program grows. When a file holds a single class, attention goes to the shape of the abstraction instead of the shape of the data, which is the part that matters: a program is a pipeline that transforms data. Designing the hierarchy first means committing to boundaries you cannot judge yet, since the real limits only show up once you build. The up-front structure is usually guesswork you later pay to undo. It is easier to let structure follow the data once you can actually see it.
+Object modeling also assumes the world comes pre-divided into neat types, and it rarely does. Real concepts overlap and shift, so you spend energy on where a method belongs and what to name the class that owns it, and the answer keeps moving as the program grows. When a file holds a single class, attention goes to the shape of the abstraction instead of the shape of the data, which is the part that matters: a program is an assembly line that transforms data. Designing the hierarchy first means committing to boundaries you cannot judge yet, since the real limits only show up once you build. The up-front structure is usually guesswork you later pay to undo. It is easier to let structure follow the data once you can actually see it.
 
 The second problem is the drift away from sequential code and flat data. Small objects can do little alone, so they collect references to other objects, and getting anything done becomes a method calling a method calling a method. Data ends up cross-referenced into a graph with no fixed order to read. Code is easiest to follow as an assembly line: data in one end, a sequence of stages, a result out the other. When the wrong result comes out, you bisect the stages. A graph of objects calling each other has no such order to bisect.
 
