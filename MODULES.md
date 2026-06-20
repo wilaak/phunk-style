@@ -142,16 +142,14 @@ use app\util;
 $v = util\clamp($x, $lo, $hi);
 ```
 
-Group imports sharing a vendor in one multi-line `use`, one per line, trailing
-comma. Reserve the group form for two or more from one vendor:
+Write one `use` per import, each on its own line. Skip the multi-line group form
+(`use app\{...};`); plain one-per-line statements stay greppable and diff cleanly:
 
 ```php
-use app\{
-    config,
-    env,
-    api,
-    http,
-};
+use app\config;
+use app\env;
+use app\api;
+use app\http;
 ```
 
 Alias only to resolve a collision, never to shorten, and keep the origin in the
@@ -164,16 +162,6 @@ Never alias to a short arbitrary token (`use app\ledger as l;`); that strips
 context like `use function`.
 
 PHP has no module-private visibility, so one attribute adds it with a `Scope` enum:
-
-```php
-namespace app;
-
-enum Scope
-{
-    case Module;   // visible to every file in the namespace, invisible outside
-    case File;     // visible only in the declaring file
-}
-```
 
 - `#[Internal]`: module-private, the default, visible to every file in the
   namespace, invisible outside.
@@ -428,13 +416,11 @@ validate into a typed `Config`, so a bad value fails at startup, not mid-request
 ```php
 require __DIR__ . '/src/loader.php';
 
-use app\{
-    config,
-    clock,
-    env,
-    api,
-    http,
-};
+use app\config;
+use app\clock;
+use app\env;
+use app\api;
+use app\http;
 
 // Composition root. Runs once, at process start.
 
@@ -464,10 +450,8 @@ built here and never stored on `$env`.
 ```php
 namespace app\api;
 
-use app\{
-    env,
-    http,
-};
+use app\env;
+use app\http;
 
 // Shell handler. The framework closure above is just the adapter into this.
 function serve(env\Env $env, \Swoole\Http\Request $req, \Swoole\Http\Response $res): void
