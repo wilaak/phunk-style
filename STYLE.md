@@ -250,7 +250,7 @@ Asserts are for bugs, never for input.
 For control planes: setup, routing, decisions. Rare, assert everything. For data planes: the hot loop over bulk data, keep asserts and branches out.
 
 ```PHP
-namespace app\scan;
+namespace app\parse;
 
 // control plane: cheap to check, check hard
 function scan_start(string $buffer, int $mode): array
