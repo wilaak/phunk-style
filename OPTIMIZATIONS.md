@@ -35,7 +35,7 @@ own the buffer, taking sole ownership first (detaching the array from the struct
 so the fill mutates in place instead of copying on write:
 
 ```php
-final class Buf
+class Buf
 {
     /** @var list<int> reused across calls; refilled, never returned by value */
     public array $items = [];
@@ -125,7 +125,7 @@ call sites read plainly; the JIT inlines functions this small, so the hot loop p
 nothing for the clarity.
 
 ```php
-final class Cell
+class Cell
 {
     /** x: bits 0..15 (u16) */
     const X_SHIFT = 0;
@@ -163,7 +163,7 @@ ways the layout section describes. As a stride (AoS), one flat array with severa
 ints per cell, the packed position and a weight interleaved:
 
 ```php
-final class Grid
+class Grid
 {
     /** packed (x, y) */
     const POS    = 0;
@@ -246,7 +246,7 @@ no methods, never instantiated:
 ```php
 namespace app\cpu;
 
-final class Limit
+class Limit
 {
     const STRIDE    = 8;
     const MASK      = 0xFFFF;
@@ -278,7 +278,7 @@ near-free: elided when the type already matches, a conversion owed anyway when n
 Cast once into a local where the value leaves the array, then compute on the local.
 
 ```php
-final class Point
+class Point
 {
     const LAT    = 0;
     const LNG    = 1;
@@ -306,7 +306,7 @@ When the tag is loop-invariant, hoist the `match` out of the loop, so each arm i
 its own specialized loop:
 
 ```php
-final class Scan
+class Scan
 {
     const CSV = 0;
     const TSV = 1;
@@ -346,7 +346,7 @@ labels transitions with neither. For a genuine multi-state machine such as a lex
 or a byte-protocol parser, each state is a label and each transition a `goto`:
 
 ```php
-final class St
+class St
 {
     const SPACE = 0;
     const WORD  = 1;

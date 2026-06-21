@@ -55,7 +55,11 @@ You may refer this very scientific graph below.
 
 Expected failures are values, not exceptions. Reserve exceptions for cases that are genuinely exceptional. Throwing is a panic, it unwinds to the top of the request, gets logged or killed, not the server. Always handle errors and never ignore a return.
 
+The core returns the value:
+
 ```PHP
+namespace app\ledger;
+
 enum AccountError
 {
     case NotFound;
@@ -78,21 +82,30 @@ function account_debit(
     $account->balance_cents -= $amount_cents;
     return $account;
 }
+```
+
+The edge branches on it:
+
+```PHP
+namespace app\api;
+
+use app\ledger;
+use app\http;
 
 function account_debit_page(
-    Account $account,
-    int     $amount_cents,
-): Response
+    ledger\Account $account,
+    int            $amount_cents,
+): http\Response
 {
-    $result = account_debit($account, $amount_cents);
-    if ($result instanceof Account) {
-        return http_200(render_balance($result));
+    $result = ledger\account_debit($account, $amount_cents);
+    if ($result instanceof ledger\Account) {
+        return http\ok($result);
     }
 
     return match ($result) {
-        AccountError::Frozen            => http_409('frozen'),
-        AccountError::InsufficientFunds => http_402(),
-        AccountError::NotFound          => http_404(),
+        ledger\AccountError::Frozen            => http\conflict('frozen'),
+        ledger\AccountError::InsufficientFunds => http\payment_required(),
+        ledger\AccountError::NotFound          => http\not_found(),
     };
 }
 ```
@@ -159,7 +172,7 @@ class RingBuffer
 function points_filter(array $points, \Closure $keep): array
 ```
 
-You can use ablock with a fixed 80 columns.
+You can use a block with a fixed 80 columns.
 
 ```php
 // =============================================================================
@@ -206,6 +219,8 @@ $b    = $items[$slot];
 Assert what must be true. A wrong belief should crash here, not corrupt data later. Aim for two per function. Check arguments, results, and what must never happen.
 
 ```PHP
+namespace app\ledger;
+
 function account_debit(Account $account, int $amount_cents): void
 {
     // expect
@@ -235,6 +250,8 @@ Asserts are for bugs, never for input.
 For control planes: setup, routing, decisions. Rare, assert everything. For data planes: the hot loop over bulk data, keep asserts and branches out.
 
 ```PHP
+namespace app\scan;
+
 // control plane: cheap to check, check hard
 function scan_start(string $buffer, int $mode): array
 {
@@ -254,14 +271,16 @@ Assert freely where it's cheap, stay bare where it's hot.
 Every loop and queue has a max. Unbounded means one bad input takes the server down.
 
 ```PHP
+use app\queue;
+
 // bad: grows forever
-while (ring_pop($ring, $x)) {
+while (queue\ring_buffer_pop($ring, $x)) {
     $batch[] = $x;
 }
 
 // good: drain at most a batch
 $max = 1024;
-for ($i = 0; $i < $max && ring_pop($ring, $x); $i++) {
+for ($i = 0; $i < $max && queue\ring_buffer_pop($ring, $x); $i++) {
     $batch[] = $x;
 }
 ```
@@ -273,6 +292,8 @@ The parent decides. The helpers do.
 Branches and state live in the parent. Helpers take plain values and return plain values, no questions about who called them, no writing back.
 
 ```PHP
+namespace app\ledger;
+
 // parent: owns the branch and the state
 function account_import(array $rows): int
 {
@@ -302,6 +323,8 @@ Pure leaves test alone and read top to bottom.
 Deep nesting hides the path. Return early, handle the bad case, get out. Each level should be the happy path going down, not a staircase.
 
 ```PHP
+namespace app\ledger;
+
 // bad: the real work is buried three levels deep
 function account_debit(Account $account, int $amount_cents): bool
 {
@@ -351,6 +374,8 @@ if ($index < $count) { ... }
 Ask if it's doing one thing or several. Often it's several things, you can pull those out so the parent reads as steps.
 
 ```PHP
+namespace app\ledger;
+
 // the parent reads like a table of contents
 function account_import(array $rows): int
 {
@@ -360,16 +385,40 @@ function account_import(array $rows): int
 }
 ```
 
+## Long signatures
+
+One line while it fits the 100 columns. When it doesn't, one parameter per line, names aligned into a column, a trailing comma, and the return type on the closing line.
+
+```PHP
+// fits: keep it on one line
+function account_debit(Account $account, int $amount_cents): Account|AccountError
+{
+    // ...
+}
+
+// too long: one per line, types and names as two aligned columns
+function transfer_handle(
+    env\Env          $env,
+    transfer\Request $request,
+    transfer\Options $options,
+): transfer\Result
+{
+    // ...
+}
+```
+
 ## Pass options explicitly
 
 Spell out the options that matter at the call site. A default that changes under you is a silent bug.
 
 ```PHP
+use app\ledger;
+
 // hidden: the defaults decide; change one and every caller shifts silently
-$rows = account_search($query);
+$rows = ledger\account_search($query);
 
 // explicit: the call states what it wants
-$rows = account_search($query, limit: 50, include_closed: false);
+$rows = ledger\account_search($query, limit: 50, include_closed: false);
 ```
 
 ## Batch work and let the CPU sprint
@@ -377,13 +426,15 @@ $rows = account_search($query, limit: 50, include_closed: false);
 Big straight runs are much faster than ping ponging between tasks, so amortize it: gather, process, commit in bulk.
 
 ```PHP
+use app\store;
+
 // bad: a round-trip per row
 foreach ($orders as $order) {
-    order_save($db, $order);
+    store\order_save($db, $order);
 }
 
 // good: one sweep, one round-trip
-order_save_many($db, $orders);
+store\order_save_many($db, $orders);
 ```
 
 Lay data out so a pass reads it in order, then sweep it once. Cache-efficient chunking comes first.
@@ -403,6 +454,10 @@ The queue smooths the world. A bounded queue gives you backpressure, so under lo
 And the statistics practically fall out from it. Queue depth is load, items per tick is throughput, time per tick is latency.
 
 ```PHP
+namespace app\worker;
+
+use app\queue;
+
 // bad: handle each event inline, at the sender's pace
 function on_message(Message $message): void
 {
@@ -410,15 +465,15 @@ function on_message(Message $message): void
 }
 
 // good: enqueue now, drain on the tick, bounded
-function on_message(RingBuffer $inbox, Message $message): void
+function on_message(queue\RingBuffer $inbox, Message $message): void
 {
-    ring_push($inbox, $message);
+    queue\ring_buffer_push($inbox, $message);
 }
 
-function tick(RingBuffer $inbox): void
+function tick(queue\RingBuffer $inbox): void
 {
     $max = 1024;
-    for ($i = 0; $i < $max && ring_pop($inbox, $message); $i++) {
+    for ($i = 0; $i < $max && queue\ring_buffer_pop($inbox, $message); $i++) {
         message_process($message);
     }
 }
