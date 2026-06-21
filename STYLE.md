@@ -1,35 +1,32 @@
-# Style guide
+# Style is design 
 
-The concrete syntax rules of the PHUNK style.
+Our design goals are safety, performance, and developer experience. In that order. All three are important. Good style advances these goals. Does the code make for more or less safety, performance or developer experience? That is why we need style.
 
-## Casing
+We draw inspiration from the excellent [TigerStyle](https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/TIGER_STYLE.md) where applicable to PHP. Much of the below stems from that.
 
-The syntax rules with minimal ambiguity and clear boundaries for easy distinction.
-
-> [!NOTE]   
-> Lowercase namespaces are deliberate against the usual PascalCase to avoid the ambiguity with types.
+## Syntax casing
 
 > [!NOTE]   
-> Array key casing applies only to keys you define; external keys (DB columns, JSON, headers) keep their source casing.
+> snake_case namespaces are deliberately against the usual PascalCase to avoid the confusion with types.
+> Built-in and third-party that break this keep their source casing, we can't do much about that.
 
-| Construct                     | Casing             | Example          |
-| ----------------------------- | ------------------ | ---------------- |
-| Variable, local               | `snake_case`       | `$order_line`    |
-| Variable, property            | `snake_case`       | `$created_at`    |
-| Variable, parameter           | `snake_case`       | `int $row_count` |
-| Function, free                | `snake_case`       | `order_total()`  |
-| Function, method              | `camelCase`        | `getTotal()`     |
-| Type, class                   | `PascalCase`       | `OrderLine`      |
-| Type, interface               | `PascalCase`       | `Comparable`     |
-| Type, trait                   | `PascalCase`       | `Timestamps`     |
-| Type, enum                    | `PascalCase`       | `Status`         |
-| Type, enum case               | `PascalCase`       | `Status::Active` |
-| Namespace                     | `snake_case`       | `app\order_book` |
-| Array key, string             | `snake_case`       | `'order_line'`   |
-| Constant                      | `UPPER_SNAKE_CASE` | `MAX_SIZE`       |
-| Goto label                    | `UPPER_SNAKE_CASE` | `PARSE_END`      |
-
-### Acronyms
+| Construct                     | Casing             | Example                    |
+| ----------------------------- | ------------------ | ----------------           |
+| Variable, local               | `snake_case`       | `$order_line`              |
+| Variable, property            | `snake_case`       | `$created_at`              |
+| Variable, parameter           | `snake_case`       | `int $row_count`           |
+| Function, free                | `snake_case`       | `order_total()`            |
+| Function, method              | `camelCase`        | `getTotal()`               |
+| Type, record (struct)         | `PascalCase`       | `OrderLine`                |
+| Type, class (object)          | `PascalCase`       | `HttpClient`               |
+| Type, interface               | `PascalCase`       | `Comparable`               |
+| Type, trait                   | `PascalCase`       | `Timestamps`               |
+| Type, enum                    | `PascalCase`       | `OrderStatus`              |
+| Type, enum case               | `PascalCase`       | `OrderStatus::InTransit`   |
+| Namespace                     | `snake_case`       | `app\order_book`           |
+| Array key, string             | `snake_case`       | `'order_line'`             |
+| Constant                      | `UPPER_SNAKE_CASE` | `MAX_SIZE`                 |
+| Goto label                    | `UPPER_SNAKE_CASE` | `PARSE_END`                |
 
 Treat acronyms as words: first letter cased per the rule, the rest lowercase.
 
@@ -37,160 +34,28 @@ Treat acronyms as words: first letter cased per the rule, the rest lowercase.
 - `parseXmlId()`, not `parseXMLID()`
 - `$user_id`, not `$user_iD`
 
-Built-in and third-party that break this keep their source casing, we can't do much about that.
 
-## Naming Things
+## Prioritize naming and flow
 
-Some say it's the most difficult thing in programming. In any case, try to prioritize naming and flow: if code reads naturally, comments are mostly for non-obvious constraints.
+Prioritize naming and flow: if code reads naturally, comments are mostly for non-obvious constraints.
 
 ### Choosing a name
 
-Try to avoid abbreviations where applicable, exceptions being things like loop counters. As an examle, you should write `$buffer`, not `$buf`. Use a concept per name, and avoid reusing a name for two concepts in one scope.
+Avoid excessive abbreviations, exceptions being things like loop counters or similar. Example: write `$buffer`, not `$buf`. Use a concept per name, and avoid reusing a name for two concepts in one scope.
 
-Long explicit names like `account_import_validate_rows` are doing their job: it says exactly what the function is and stays searchable. Don't always worry much about length, especially for internal use. Even a stupidly long and explicit name can be fine in some cases.
+Try keeping related names at similar length and balance as they are easier to scan side by side. Append units by descending significance so related names group: `$latency_ms_max`, `$size_bytes_total`.
 
-Keep related names at similar length when practical: balanced names are easier to scan side by side. Append units by descending significance so related names group: `$latency_ms_max`, `$size_bytes_total`.
+Longer names can be fine and if they are doing their job by explicit about what the thing is or does. If it is going to be used heavily and in many places it could be wise to think about lenght as it can be derived from context.
 
-You may ponder this graph of name length discoverability:
+You may refer this very scientific graph below.
 
 ![Naming discoverability chart](./assets/naming-things-discoverability.webp)
 
-### Aligning assignments
+## Handle all errors
 
-Aligning `=` within a small group of related assignments is fine when it aids scanning; this is why balanced names matter.
+Expected failures are values, not exceptions. Reserve exceptions for cases that are genuinely exceptional. Throwing is a panic, it unwinds to the top of the request, gets logged or killed, not the server. Always handle errors and never ignore a return.
 
-Keep it local to a contiguous block and don't align across blank lines or unrelated statements, and don't let one long outlier force wide padding on its neighbors (rename or split it out instead).
-
-It's a nicety, not a requirement.
-
-### Example
-
-```php
-// Good pairings (similar length, easier to scan)
-$min_latency_ms = 12;
-$max_latency_ms = 47;
-
-$input_bytes_total  = 1024;
-$output_bytes_total = 2048;
-
-$read_count_total  = 18;
-$write_count_total = 21;
-
-// Avoid mixed-length pairings when practical
-$min_latency_ms = 12;
-$max_lat        = 47;
-
-$in_bytes_total     = 1024;
-$output_bytes_total = 2048;
-
-$reads             = 18;
-$write_count_total = 21;
-```
-
-## Organizing functions
-
-The casing rules above are syntax: follow them. What follows is a recommendation for how to organize free functions. For the fuller treatment of modules, see [MODULES.md](MODULES.md).
-
-### Splitting into helpers
-
-A function past ~70 lines probably carries more than one responsibility. It can be a good idea to split it into helpers so the parent reads as prose: a short sequence of named steps you follow top to bottom, each step's detail one level down.
-
-The exception can be a hot path where the call itself is the cost. PHP function calls are not free, and in a tight loop the overhead of jumping into a helper can outweigh the clarity it buys.
-
-### Subject-prefixed functions
-
-Place free functions in a module namespace, then prefix each function with its subject type so APIs stay grouped by module and by name.
-
-Helpers from a split follow the same rule: keep a single-caller helper grouped under its parent by prefixing with the parent's name.
-
-### Subject scope tips
-
-- Single caller: keep parent prefix (`account_import_validate_rows`) and mark `#[Internal(Scope::File)]`.
-- Multiple callers in one module: drop the parent prefix (`account_validate_rows`) and mark `#[Internal]`.
-- Callers across modules: make it a public module API and keep a clear subject prefix.
-
-### Example
-
-```php
-namespace app\ledger;
-
-// In module app\ledger, account_* reads as one family and stays greppable.
-final class Account
-{
-    public int $id = 0;
-}
-
-function account_can_debit(Account $account, int $amount_cents): bool
-{
-    return $amount_cents >= 0;
-}
-
-function account_import(array $rows): int
-{
-    $rows_validated = account_import_validate_rows($rows);
-    return account_import_persist_rows($rows_validated);
-}
-
-#[Internal(Scope::File)]
-function account_import_validate_rows(array $rows): array
-{
-    // Scoped to account_import: keep the parent prefix for locality.
-    return $rows;
-}
-
-#[Internal(Scope::File)]
-function account_import_persist_rows(array $rows): int
-{
-    // Scoped to account_import: keep the parent prefix for locality.
-    return count($rows);
-}
-```
-
-## Control flow and safety
-
-Keep control flow explicit, the same assembly line you can read top to bottom.
-
-### Branching
-
-Reach for `match` over `switch`: it compares strictly, returns a value, and throws on a case you forgot, where `switch` falls through silently. Add a default arm only for a genuine fallback. Split compound conditions into nested branches rather than `&&`/`||` chains, so stepping through shows which test failed, and brace every block. Avoid recursion unless the problem is inherently recursive and its depth is bounded.
-
-### Assertions
-
-Use `assert()` for invariants that must never fail in correct code: bugs, not bad input. For performance you can set (`zend.assertions = 1` in dev and CI, `-1` in production). Never assert on boundary input, since assertions compile out; anything from outside needs a guard that always runs.
-
-### Errors
-
-Handle every error; never discard an exception or ignore a return value. Expected failures (not found, validation failed, insufficient balance) are domain outcomes: put them in the return type so the contract is checked, not commented. One obvious failure is a nullable return (`?Account`); several distinct failures the caller branches on are a result enum and a union return (`Account|AccountError`). Reserve exceptions for the genuinely unexpected (dropped connection, full disk, corrupted state).
-
-A thrown exception here is a panic, not control flow: it unwinds to the top of the request or tick, gets logged, and aborts that one unit of work without taking down the server. Nothing on the path between catches it to recover, so anything a caller is meant to handle must be a value, not a throw.
-
-This is the edge over a `@throws` docblock: a union return type is a real type PHP and the analyzer both read, where `@throws` is an advisory note the language never enforces.
-
-```php
-// bad: throws for an expected outcome, forcing callers into try/catch for control flow
-function account_find(\PDO $db, int $id): Account
-{
-    $row = account_row($db, $id);
-    if ($row === null) {
-        throw new NotFoundException();
-    }
-    return account_of_row($row);
-}
-
-// good: return null; the caller branches on it
-function account_find(\PDO $db, int $id): ?Account
-{
-    $row = account_row($db, $id);
-    if ($row === null) {
-        return null;
-    }
-    return account_of_row($row);
-}
-```
-
-When there is more than one failure mode, name them in an enum and return a union, so the failures live in the signature and a `match` over the result stays exhaustive:
-
-```php
+```PHP
 enum AccountError
 {
     case NotFound;
@@ -198,13 +63,11 @@ enum AccountError
     case InsufficientFunds;
 }
 
-// The failure modes are part of the return type: no docblock needed
-function account_debit(\PDO $db, int $id, int $amount_cents): Account|AccountError
+function account_debit(
+    Account $account,
+    int     $amount_cents,
+): Account|AccountError
 {
-    $account = account_find($db, $id);
-    if ($account === null) {
-        return AccountError::NotFound;
-    }
     if ($account->frozen) {
         return AccountError::Frozen;
     }
@@ -216,103 +79,79 @@ function account_debit(\PDO $db, int $id, int $amount_cents): Account|AccountErr
     return $account;
 }
 
-function account_debit_page(\PDO $db, int $id, int $amount_cents): Response
+function account_debit_page(
+    Account $account,
+    int     $amount_cents,
+): Response
 {
-    $result = account_debit($db, $id, $amount_cents);
-    return match (true) {
-        $result instanceof Account                   => render_balance($result),
-        $result === AccountError::NotFound           => http_404(),
-        $result === AccountError::Frozen             => http_409('account frozen'),
-        $result === AccountError::InsufficientFunds  => http_402(),
+    $result = account_debit($account, $amount_cents);
+    if ($result instanceof Account) {
+        return http_200(render_balance($result));
+    }
+
+    return match ($result) {
+        AccountError::Frozen            => http_409('frozen'),
+        AccountError::InsufficientFunds => http_402(),
+        AccountError::NotFound          => http_404(),
     };
 }
 ```
 
-### Variable scope
+## Explain why, not what
 
-Declare each variable at the narrowest scope that fits, initialised where you declare it unless the assignment is conditional, so a reader never meets a name before its value.
+Comments explain why, not what; well-named identifiers say what. Comment a hidden constraint, a non-obvious invariant, a workaround, or surprising behavior.
 
-## Data design
+Documentation that belongs to a symbol goes in a `/** */` docblock, so the IDE surfaces it on hover static analysis check it.
 
-Design the data on its own terms before the code that uses it; code shaped first
-drags the data into needless relationships and redundancy. Interrogate every
-structure:
-
-- Is this the most compact encoding? Denormalize only with a stated reason.
-- Are these linkages necessary? Prefer a key or index over a pointer or reference,
-  so the two structures change independently.
-- Must this be stored, or can it be recomputed when needed?
-- Can this hierarchy or graph be flattened into an array?
-
-Flat data is easier to understand, change, and keep mutation under control; linked
-structures couple their owners. Carry data in structs of public typed fields with
-behavior as free functions taking the struct first. Avoid arrays of mixed types;
-use a typed value object or named return struct (shapes in [MODULES.md](MODULES.md)).
-
-Default to wide, public structs grouped by access pattern, not narrow ones split by
-"responsibility": fields read and written together in the same stages belong in the
-same struct. Going wide is what lets a cross-cutting pass (logging, validation,
-serialization, snapshot) be one function over the whole record instead of something
-threaded through every type. A wide struct stays safe only under write
-consolidation, many stages reading a field and few writing it; without that it is a
-god object, not a fat struct. See [The fat struct](chapters/06-classes.md#the-fat-struct).
-
-## State and values
-
-> Give a man a state and he'll have a bug one day, but teach him to represent state in two separate locations that have to be kept in sync and he'll have bugs for a lifetime.
-
-Never duplicate a variable to remember a value: two sources of truth diverge.
-Compute or pass it, close to where it is used. Consolidate mutation: the fewer
-points that can write a value, the easier it is to reason about. When a value's
-role changes as it flows, introduce a fresh, honestly named value (`$slug`, then
-`$slug_normalized`) rather than reusing one mutated variable.
-
-Prefer the simplest return type that expresses the outcome:
-
-```
-void > bool > int > ?int > value-or-exception
-```
-
-## Off-by-one
-
-Index, count, and size are distinct:
-
-| Concept | Meaning              | Conversion                          |
-|---------|----------------------|-------------------------------------|
-| Index   | Zero-based offset    | index + 1 = count for a single item |
-| Count   | Number of items      | count * unit_bytes = size_bytes     |
-| Size    | Byte or unit measure |                                     |
-
-Name accordingly: `$node_index`, `$node_count`, `$buffer_size_bytes`. When
-dividing integers, comment whether you intend truncation, floor, or ceiling.
-
-## Comments
-
-Comments explain why, not what; well-named identifiers say what. Comment a hidden
-constraint, a non-obvious invariant, a workaround, or surprising behavior. Keep
-them terse.
-
-Documentation that belongs to a symbol goes in a `/** */` docblock, so the IDE
-surfaces it on hover and PHPStan or Psalm check it. A function earns one when its
-contract is not visible in its signature: a precondition, an invariant, or an order
-it must run in:
+A record or object earns one too, on the type itself.
 
 ```php
-/**
- * Reads the version without rechecking it. Callers must hold the account lock;
- * a concurrent write would otherwise be lost. Cheap, since the row is already pinned.
- */
-function account_version(Account $account): int
+// =============================================================================
+// Avoid: type doc as a banner the IDE never sees; notes to the right run wide
+// =============================================================================
+
+//
+// Ring buffer (bounded FIFO). Storage is reused in a circle; slot is
+// counter & (capacity - 1), so capacity MUST be a power of two.
+//
+class RingBuffer
 {
-    return $account->version;
+    public int $head = 0;     // total pushed
+    public int $tail = 0;     // total popped
+    public int $capacity = 0; // power of two; the AND wrap depends on it
 }
-```
 
-The other case is a type PHP cannot state: an array's element layout, a packed
-buffer's stride, or a local closure's signature. The docblock carries it in
-PHPStan/Psalm notation, which the analyzer and IDE read:
+// =============================================================================
+// Good: type doc on the type; property notes above, so lines stay narrow
+// =============================================================================
 
-```php
+/**
+ * Ring buffer (bounded FIFO). Storage is reused in a circle; slot is
+ * counter & (capacity - 1), so capacity MUST be a power of two.
+ */
+class RingBuffer
+{
+    /**
+     * Total pushed.
+     */
+    public int $head = 0;
+
+    /**
+     * Total popped.
+     */
+    public int $tail = 0;
+
+    /**
+     * Power of two; the AND wrap depends on it.
+     */
+    public int $capacity = 0;
+}
+
+// =============================================================================
+// Document a type PHP cannot state: an array's element layout,
+// a packed buffer's stride, or a local closure's signature.
+// =============================================================================
+
 /**
  * @param list<float>         $points  Flat [lat, lng, lat, lng, ...]; stride 2.
  * @param \Closure(int): bool $keep    Local predicate over a point index.
@@ -320,46 +159,280 @@ PHPStan/Psalm notation, which the analyzer and IDE read:
 function points_filter(array $points, \Closure $keep): array
 ```
 
-A `\Closure` is fine for a local callback; a callback that is a published contract
-should be a single-method interface, which types the signature natively (see
-[MODULES.md](MODULES.md), No premature abstraction).
-
-Document non-obvious properties the same way. A struct-of-arrays whose columns are
-flat-packed with a stride earns a `@var` per field carrying the type PHP cannot
-express and the layout:
+You can use ablock with a fixed 80 columns.
 
 ```php
-/**
- * Particle pool, struct-of-arrays. Every column is indexed by slot 0..count-1;
- * the i-th particle is the i-th element of each. Scalars only, no per-particle
- * object, so iteration stays a packed sequential read (OPTIMIZATIONS.md).
- */
-final class ParticlePool
+// =============================================================================
+// Helpers
+// =============================================================================
+```
+
+Keep the label within the rule; if it runs long, wrap it across lines rather than
+letting it flow past the rule:
+
+```php
+// bad: label flows wider than the rule
+
+// =============================================================================
+// Account import: validate every row, then persist the whole batch in one transaction
+// =============================================================================
+
+// good: wrap the label so it stays within the rule
+
+// =============================================================================
+// Account import:
+// validate every row, then persist the whole batch in one transaction
+// =============================================================================
+```
+
+## Clear is clever
+
+Write the boring version. The reader should not have to decode. Simple is hard, not the first version you write. It is the last one, after you have understood the problem well enough to make it look easy. Take the time.
+
+Always say why.
+
+```PHP
+// clever: decode it line by line
+$b = $items[($h = crc32($k)) % $n];
+
+// simple: just read it
+$hash = crc32($k);
+$slot = $hash % $n;
+$b    = $items[$slot];
+```
+
+## Assertions
+
+Assert what must be true. A wrong belief should crash here, not corrupt data later. Aim for two per function. Check arguments, results, and what must never happen.
+
+```PHP
+function account_debit(Account $account, int $amount_cents): void
 {
-    public int $count = 0;
+    // expect
+    assert($amount_cents > 0);
+    // must never happen
+    assert(!$account->frozen);
 
-    /** @var list<float> Flat [x, y, x, y, ...]; stride 2, two floats per particle. */
-    public array $position = [];
+    $account->balance_cents -= $amount_cents;
 
-    /** @var list<int> One packed RGBA per particle: (r << 24) | (g << 16) | (b << 8) | a. */
-    public array $color = [];
+    // result holds
+    assert($account->balance_cents >= 0); 
 }
 ```
 
-Use `//` for the rest: the why behind a line, end-of-line notes, section markers.
-Prose after `//` takes a space, a capital, a full stop; end-of-line notes may be
-short phrases without punctuation. Mark sections with a bordered block:
+One assert per line, so you know which one fired.
 
-```php
-//
-// Helpers
-//
+```PHP
+assert($a);
+assert($b); 
+// not: assert($a && $b);
 ```
 
-## Misc
+Asserts are for bugs, never for input. 
+
+### Control vs data planes
+
+For control planes: setup, routing, decisions. Rare, assert everything. For data planes: the hot loop over bulk data, keep asserts and branches out.
+
+```PHP
+// control plane: cheap to check, check hard
+function scan_start(string $buffer, int $mode): array
+{
+    assert($buffer !== '');
+    assert($mode === Scan::CSV || $mode === Scan::TSV);
+    return scan_run($buffer, $mode);
+}
+
+// data plane: no asserts, no allocation, just the work
+function scan_run(string $buffer, int $mode): array { /* tight loop */ }
+```
+
+Assert freely where it's cheap, stay bare where it's hot.
+
+## Put a limit on everything
+
+Every loop and queue has a max. Unbounded means one bad input takes the server down.
+
+```PHP
+// bad: grows forever
+while (ring_pop($ring, $x)) {
+    $batch[] = $x;
+}
+
+// good: drain at most a batch
+$max = 1024;
+for ($i = 0; $i < $max && ring_pop($ring, $x); $i++) {
+    $batch[] = $x;
+}
+```
+
+## Push ifs up, fors down
+
+The parent decides. The helpers do.
+
+Branches and state live in the parent. Helpers take plain values and return plain values, no questions about who called them, no writing back.
+
+```PHP
+// parent: owns the branch and the state
+function account_import(array $rows): int
+{
+    $valid = account_rows_valid($rows);
+    if (!$valid) {
+        return 0;
+    }
+    return account_rows_persist($rows);
+}
+
+// leaf: pure, decides nothing, just answers
+function account_rows_valid(array $rows): bool
+{
+    foreach ($rows as $row) {
+        if ($row['amount'] < 0) {
+            return false;
+        }
+    }
+    return true;
+}
+```
+
+Pure leaves test alone and read top to bottom.
+
+## Never nest
+
+Deep nesting hides the path. Return early, handle the bad case, get out. Each level should be the happy path going down, not a staircase.
+
+```PHP
+// bad: the real work is buried three levels deep
+function account_debit(Account $account, int $amount_cents): bool
+{
+    if (!$account->frozen) {
+        if ($amount_cents > 0) {
+            if ($account->balance_cents >= $amount_cents) {
+                $account->balance_cents -= $amount_cents;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// good: guards out, work flat at the bottom
+function account_debit(Account $account, int $amount_cents): bool
+{
+    if ($account->frozen) {
+        return false;
+    }
+    if ($amount_cents <= 0) {
+        return false;
+    }
+    if ($account->balance_cents < $amount_cents) {
+        return false;
+    }
+
+    $account->balance_cents -= $amount_cents;
+    return true;
+}
+```
+
+## State invariants positively
+
+Say what should be true, not what shouldn't. A positive test reads straight and the boundary is obvious.
+
+```PHP
+// harder: a negation, and the boundary is fuzzy
+if (!($index >= $count)) { ... }
+
+// clear: the thing that must hold
+if ($index < $count) { ... }
+```
+
+## Long procedures 
+
+Ask if it's doing one thing or several. Often it's several things, you can pull those out so the parent reads as steps.
+
+```PHP
+// the parent reads like a table of contents
+function account_import(array $rows): int
+{
+    $clean = account_rows_clean($rows);
+    $valid = account_rows_valid($clean);
+    return account_rows_persist($valid);
+}
+```
+
+## Pass options explicitly
+
+Spell out the options that matter at the call site. A default that changes under you is a silent bug.
+
+```PHP
+// hidden: the defaults decide; change one and every caller shifts silently
+$rows = account_search($query);
+
+// explicit: the call states what it wants
+$rows = account_search($query, limit: 50, include_closed: false);
+```
+
+## Batch work and let the CPU sprint
+
+Big straight runs are much faster than ping ponging between tasks, so amortize it: gather, process, commit in bulk.
+
+```PHP
+// bad: a round-trip per row
+foreach ($orders as $order) {
+    order_save($db, $order);
+}
+
+// good: one sweep, one round-trip
+order_save_many($db, $orders);
+```
+
+Lay data out so a pass reads it in order, then sweep it once. Cache-efficient chunking comes first.
+
+## Run at your own pace
+
+Don't react to each external event the moment it lands. Take it onto a queue and work it on your own loop. A steady tick is predictable; an event storm can't knock you over.
+
+Owning the loop buys a lot:
+
+A tick holds many items at once, so you batch. One query, one flush, Batching is efficient and cache friendly: the same work over a packed run of data, read in order. The CPU loves that style most of all.
+
+You can also coalesce while you are there, collapsing ten "dirty" events into one redraw before doing any work.
+
+The queue smooths the world. A bounded queue gives you backpressure, so under load you shed or reject instead of falling over, and bursts flatten into a steady rate with predictable latency.
+
+And the statistics practically fall out from it. Queue depth is load, items per tick is throughput, time per tick is latency.
+
+```PHP
+// bad: handle each event inline, at the sender's pace
+function on_message(Message $message): void
+{
+    message_process($message);   // a burst floods you
+}
+
+// good: enqueue now, drain on the tick, bounded
+function on_message(RingBuffer $inbox, Message $message): void
+{
+    ring_push($inbox, $message);
+}
+
+function tick(RingBuffer $inbox): void
+{
+    $max = 1024;
+    for ($i = 0; $i < $max && ring_pop($inbox, $message); $i++) {
+        message_process($message);
+    }
+}
+```
+
+## Few dependencies
+
+Every dependency is code you did not write running in your process: supply-chain risk, version churn, and surface you cannot see.
+
+Prefer the standard library and a few lines of your own over a package. Add one only when it clearly earns its keep, and keep it behind your own edge so you can swap it.
+
+## Other
 
 - Line length 100 columns recommended; exceed only when breaking hurts more.
-- Opening brace on its own line for classes, methods, functions; same line for
-  control structures. Braces always.
-- One blank line after the namespace and after the `use` block, and between
-  functions. Trailing commas in multi-line arrays and argument lists.
+- Opening brace on its own line for classes, methods, functions; same line for control structures. Braces always.
+- One blank line after the namespace and after the `use` block, and between functions.
+- Trailing commas in multi-line arrays and argument lists.
