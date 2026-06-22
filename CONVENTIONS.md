@@ -34,6 +34,25 @@ function notify_send(Channel $channel, Message $message): Result
 | Variants known at authoring time (a closed set)   | enum + central `match`       |
 | Variants registered by strangers at runtime       | single-method interface      |
 
+## Sum type with data
+
+An enum is a tag with no fields. When a variant carries data, give each variant a record and return a union; `match` on the type.
+
+```php
+class Circle    { public float $radius = 0.0; }
+class Rectangle { public float $w = 0.0; public float $h = 0.0; }
+
+function shape_area(Circle|Rectangle $shape): float
+{
+    return match (true) {
+        $shape instanceof Circle    => 3.14159 * $shape->radius ** 2,
+        $shape instanceof Rectangle => $shape->w * $shape->h,
+    };
+}
+```
+
+Adding a variant to the union turns every non-exhaustive `match` into a static error, same as adding an enum case.
+
 ### Subject-prefixed functions
 
 Place free functions in a module namespace, then prefix each function with its subject type so APIs stay grouped by module and by name.
@@ -112,6 +131,20 @@ serialization, snapshot) be one function over the whole record instead of someth
 threaded through every type. A wide struct stays safe only under write
 consolidation, many stages reading a field and few writing it; without that it is a
 god object, not a fat struct. See [The fat struct](chapters/06-classes.md#the-fat-struct).
+
+### Handles, not references
+
+Refer to a record by an integer index into its array, not by passing the object around. An index is small, copyable, serializable, and stable across a save and load; an object handle is none of those and quietly aliases.
+
+```php
+$accounts = [];   // list<Account>, the index is the id
+
+$from = 12;       // a handle, not an object
+$to   = 47;
+ledger\transfer($accounts, $from, $to, $amount_cents);
+```
+
+This is what lets a struct-of-arrays work and keeps two structures independent.
 
 ## State and values
 

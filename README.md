@@ -2,7 +2,7 @@
 
 *This is a draft for the PHUNK code style guide and is a W.I.P!*
 
-See [Style](STYLE.md), see [Modules](MODULES.md), see [Architecture](ARCHITECTURE.md), see [Conventions](CONVENTIONS.md), see [Optimizations](OPTIMIZATIONS.md) 
+See [Style](STYLE.md), see [Modules](MODULES.md), see [Architecture](ARCHITECTURE.md), see [Conventions](CONVENTIONS.md)
 
 # Introduction
 

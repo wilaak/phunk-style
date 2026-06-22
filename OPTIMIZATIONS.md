@@ -100,6 +100,26 @@ loop the copy, not the work, dominates. Take it by reference and mutate in place
 function process(string &$buffer): void { $buffer .= '-x'; }
 ```
 
+## Pass a view, not a copy
+
+To work on part of a buffer, pass the buffer with an offset and length, not a copied
+slice. The copy allocates and duplicates bytes; the view is three integers.
+
+```php
+// bad: substr copies the region before parsing it
+$value = number_parse(substr($buffer, $start, $len));
+
+// good: parse in place over (buffer, offset, len)
+$value = number_parse($buffer, $start, $len);
+```
+
+## Reuse a scratch buffer per tick
+
+A loop that allocates a fresh working array each pass churns the allocator. Hold one
+scratch buffer and clear it each tick instead, the arena pattern in miniature.
+Truncate to reset (`$scratch = []` on a sole-owned local), do not reallocate. Same
+detach-and-refill discipline as the reused buffer above; it cannot cross a coroutine.
+
 ## Layout: AoS vs SoA
 
 Array of Structs interleaves fields at a stride equal to the field count: best when

@@ -479,6 +479,41 @@ function tick(queue\RingBuffer $inbox): void
 }
 ```
 
+## No magicians
+
+Code should do what it says. No hidden dispatch, thats just not readable and impossible to make performant.
+
+```PHP
+// bad: __call hides where this goes, and nothing is greppable
+$report->generateMonthlyPdf();
+
+// good: a real function you can jump to and grep
+report\generate($report, Report::Monthly, Report::Pdf);
+```
+
+## Money as integer
+
+For those who still don't get it, TAKE NOTE.
+
+Money as integer minor units (cents), never a float. Floats round and drift; `0.1 + 0.2` is not `0.3`.
+
+Reserve float for measurements.
+
+## Clean up at the edge
+
+A resource opened must be released, even when a panic unwinds.
+
+```PHP
+$lock = lock\acquire($env->locks, $account_id);
+try {
+    return account_settle($account);
+} finally {
+    lock\release($lock);
+}
+```
+
+Keep acquire and release adjacent so a leak is obvious.
+
 ## Few dependencies
 
 Every dependency is code you did not write running in your process: supply-chain risk, version churn, and surface you cannot see.

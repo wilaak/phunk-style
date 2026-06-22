@@ -102,13 +102,16 @@ use app\util;
 $v = util\clamp($x, $lo, $hi);
 ```
 
-One `use` per line. One-per-line greps and diffs cleanly.
-
 ```php
-use app\config;
-use app\env;
-use app\api;
-use app\http;
+// a lone import can stay one line
+use app\util;
+
+use app\{
+    config,
+    env,
+    api,
+    http,
+};
 ```
 
 Alias to break a collision, not to shorten, and keep the origin:

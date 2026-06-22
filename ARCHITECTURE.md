@@ -153,11 +153,13 @@ validate into a typed `Config`, so a bad value fails at startup, not mid-request
 ```php
 require __DIR__ . '/src/loader.php';
 
-use app\config;
-use app\clock;
-use app\env;
-use app\api;
-use app\http;
+use app\{
+    config,
+    clock,
+    env,
+    api,
+    http,
+};
 
 // Composition root. Runs once, at process start.
 
