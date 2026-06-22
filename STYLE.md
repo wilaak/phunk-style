@@ -49,7 +49,7 @@ Please refer to the very scientific graph below:
 
 ## Error handling
 
-Expected failures are values and not exceptions. Reserve exceptions for cases that are genuinely exceptional such as a dropped connection when reading from it. Always handle errors and never ignore a return.
+Expected failures are values and not exceptions. Reserve exceptions for the genuinely exceptional: failures with no meaningful local handling, like running out of memory or a missing required config at startup, where the only sane response is to crash fast. Always handle errors and never ignore a return.
 
 Below is an example of using a union for explicit error handling, you many also use the nullable return `?T` for more obvious errors.
 
@@ -119,6 +119,37 @@ try {
 
 Keep acquire and release adjacent so a leak is obvious.
 
+
+### Assertions
+
+Assert what must be true. A wrong belief should crash here, not corrupt data later. Aim for two per function. Check arguments, results, and what must never happen.
+
+```PHP
+namespace app\ledger;
+
+function account_debit(Account $account, int $amount_cents): void
+{
+    assert($amount_cents > 0);
+    assert(!$account->frozen);
+
+    $account->balance_cents -= $amount_cents;
+
+    assert($account->balance_cents >= 0); 
+}
+```
+
+One assert per line, so you know which one fired.
+
+```PHP
+assert($a);
+assert($b); 
+// not: assert($a && $b);
+```
+
+Asserts are for bugs, never for input. 
+
+For performance, assert freely where it's cheap, stay bare where it's hot like a loop over bulk data to keep branches out.
+
 ## Comments
 
 Comments should explain why, not what; well-named identifiers say what already. Use comments for a hidden constraint, a non-obvious invariant, a workaround, or surprising behavior.
@@ -169,38 +200,6 @@ $slot = $hash % $n;
 $b    = $items[$slot];
 ```
 
-## Assertions
-
-Assert what must be true. A wrong belief should crash here, not corrupt data later. Aim for two per function. Check arguments, results, and what must never happen.
-
-```PHP
-namespace app\ledger;
-
-function account_debit(Account $account, int $amount_cents): void
-{
-    // expect
-    assert($amount_cents > 0);
-    // must never happen
-    assert(!$account->frozen);
-
-    $account->balance_cents -= $amount_cents;
-
-    // result holds
-    assert($account->balance_cents >= 0); 
-}
-```
-
-One assert per line, so you know which one fired.
-
-```PHP
-assert($a);
-assert($b); 
-// not: assert($a && $b);
-```
-
-Asserts are for bugs, never for input. 
-
-For performance, assert freely where it's cheap, stay bare where it's hot like a loop over bulk data to keep branches out.
 
 ## Put a limit on everything
 
