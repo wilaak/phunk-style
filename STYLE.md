@@ -230,7 +230,13 @@ Branches and state live in the parent. Helpers take plain values and return plai
 ```PHP
 namespace app\ledger;
 
+class Row
+{
+    public int $amount_cents = 0;
+}
+
 // parent: owns the branch and the state
+/** @param list<Row> $rows */
 function account_import(array $rows): int
 {
     $valid = account_rows_valid($rows);
@@ -241,10 +247,11 @@ function account_import(array $rows): int
 }
 
 // leaf: pure, decides nothing, just answers
+/** @param list<Row> $rows */
 function account_rows_valid(array $rows): bool
 {
     foreach ($rows as $row) {
-        if ($row['amount'] < 0) {
+        if ($row->amount_cents < 0) {
             return false;
         }
     }
@@ -439,7 +446,9 @@ report\generate($report, Report::Monthly, Report::Pdf);
 
 For those who still don't get it, TAKE NOTE. Represent money as integer minor units (cents), never a float. Floats round and drift; `0.1 + 0.2` is not `0.3`.
 
-Reserve float for measurements.
+You can image a float as two dials that together give an estimate of a number: reserve floats for measurements that don't need to be 100% accurate.
+
+Here are pretty visuals and story telling about [fundamental types in C](https://www.youtube.com/watch?v=GTNFrLZ5P1A) that gets that point across.
 
 ## Few dependencies
 
