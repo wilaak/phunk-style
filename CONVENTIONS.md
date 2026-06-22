@@ -57,14 +57,6 @@ Adding a variant to the union turns every non-exhaustive `match` into a static e
 
 Place free functions in a module namespace, then prefix each function with its subject type so APIs stay grouped by module and by name.
 
-Helpers from a split follow the same rule: keep a single-caller helper grouped under its parent by prefixing with the parent's name.
-
-### Subject scope tips
-
-- Single caller: keep parent prefix (`account_import_validate_rows`) and mark `#[Local]`.
-- Multiple callers in one module: drop the parent prefix (`account_validate_rows`) and mark `#[Internal]`.
-- Callers across modules: make it a public module API and keep a clear subject prefix.
-
 ### Example
 
 ```php
@@ -79,26 +71,6 @@ class Account
 function account_can_debit(Account $account, int $amount_cents): bool
 {
     return $amount_cents >= 0;
-}
-
-function account_import(array $rows): int
-{
-    $rows_validated = account_import_validate_rows($rows);
-    return account_import_persist_rows($rows_validated);
-}
-
-#[Local]
-function account_import_validate_rows(array $rows): array
-{
-    // Scoped to account_import: keep the parent prefix for locality.
-    return $rows;
-}
-
-#[Local]
-function account_import_persist_rows(array $rows): int
-{
-    // Scoped to account_import: keep the parent prefix for locality.
-    return count($rows);
 }
 ```
 

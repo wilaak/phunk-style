@@ -1,7 +1,5 @@
 # Style is design 
 
-Our design goals are safety, performance, and developer experience. In that order. All three are important. Good style advances these goals. Does the code make for more or less safety, performance or developer experience? That is why we need style.
-
 We draw inspiration from the excellent [TigerStyle](https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/TIGER_STYLE.md) where applicable to PHP. Much of the below stems from that.
 
 ## Syntax casing
@@ -35,27 +33,25 @@ Treat acronyms as words: first letter cased per the rule, the rest lowercase.
 - `$user_id`, not `$user_iD`
 
 
-## Prioritize naming and flow
+## Naming things
 
 Prioritize naming and flow: if code reads naturally, comments are mostly for non-obvious constraints.
 
-### Choosing a name
-
-Avoid excessive abbreviations, exceptions being things like loop counters or similar. Example: write `$buffer`, not `$buf`. Use a concept per name, and avoid reusing a name for two concepts in one scope.
+Avoid excessive abbreviations with exceptions being things like loop counters or a similar vein. Try using a concept per name, and avoid reusing a name for two concepts in one scope.
 
 Try keeping related names at similar length and balance as they are easier to scan side by side. Append units by descending significance so related names group: `$latency_ms_max`, `$size_bytes_total`.
 
-Longer names can be fine and if they are doing their job by explicit about what the thing is or does. If it is going to be used heavily and in many places it could be wise to think about lenght as it can be derived from context.
+Longer names are be fine so long as they are doing their job by being explicit about what the thing is and or does. If used heavily it can be wise to think about its length as it could be derived from context.
 
-You may refer this very scientific graph below.
+Please refer to the very scientific graph below:
 
 ![Naming discoverability chart](./assets/naming-things-discoverability.webp)
 
-## Handle all errors
+## Error handling
 
-Expected failures are values, not exceptions. Reserve exceptions for cases that are genuinely exceptional. Throwing is a panic, it unwinds to the top of the request, gets logged or killed, not the server. Always handle errors and never ignore a return.
+Expected failures are values and not exceptions. Reserve exceptions for cases that are genuinely exceptional such as a dropped connection when reading from it. Always handle errors and never ignore a return.
 
-The core returns the value:
+Below is an example of using a union for explicit error handling, you many also use the nullable return `?T` for more obvious errors.
 
 ```PHP
 namespace app\ledger;
@@ -84,8 +80,6 @@ function account_debit(
 }
 ```
 
-The edge branches on it:
-
 ```PHP
 namespace app\api;
 
@@ -110,92 +104,53 @@ function account_debit_page(
 }
 ```
 
-## Explain why, not what
+### Clean up at the edge
 
-Comments explain why, not what; well-named identifiers say what. Comment a hidden constraint, a non-obvious invariant, a workaround, or surprising behavior.
+It's important that you think about what would happen if an exception were to occur at any moment. For examle, a resource opened must be released, even when a panic unwinds.
 
-Documentation that belongs to a symbol goes in a `/** */` docblock, so the IDE surfaces it on hover static analysis check it.
-
-A record or object earns one too, on the type itself.
-
-```php
-// =============================================================================
-// Avoid: type doc as a banner the IDE never sees; notes to the right run wide
-// =============================================================================
-
-//
-// Ring buffer (bounded FIFO). Storage is reused in a circle; slot is
-// counter & (capacity - 1), so capacity MUST be a power of two.
-//
-class RingBuffer
-{
-    public int $head = 0;     // total pushed
-    public int $tail = 0;     // total popped
-    public int $capacity = 0; // power of two; the AND wrap depends on it
+```PHP
+$lock = lock\acquire($env->locks, $account_id);
+try {
+    return account_settle($account);
+} finally {
+    lock\release($lock);
 }
-
-// =============================================================================
-// Good: type doc on the type; property notes above, so lines stay narrow
-// =============================================================================
-
-/**
- * Ring buffer (bounded FIFO). Storage is reused in a circle; slot is
- * counter & (capacity - 1), so capacity MUST be a power of two.
- */
-class RingBuffer
-{
-    /**
-     * Total pushed.
-     */
-    public int $head = 0;
-
-    /**
-     * Total popped.
-     */
-    public int $tail = 0;
-
-    /**
-     * Power of two; the AND wrap depends on it.
-     */
-    public int $capacity = 0;
-}
-
-// =============================================================================
-// Document a type PHP cannot state: an array's element layout,
-// a packed buffer's stride, or a local closure's signature.
-// =============================================================================
-
-/**
- * @param list<float>         $points  Flat [lat, lng, lat, lng, ...]; stride 2.
- * @param \Closure(int): bool $keep    Local predicate over a point index.
- */
-function points_filter(array $points, \Closure $keep): array
 ```
 
-You can use a block with a fixed 80 columns.
+Keep acquire and release adjacent so a leak is obvious.
+
+## Comments
+
+Comments should explain why, not what; well-named identifiers say what already. Use comments for a hidden constraint, a non-obvious invariant, a workaround, or surprising behavior.
+
+Prefer to use `//` comments for consistency and reserve `/** */` docblocks for types that PHP cannot represent in its own syntax or for quickly commenting out larger sections.
+
+### Mark sections
+
+For large files, it can be useful to mark your sections for navigation, these are easy to search for and can aid in navigating quicker.
 
 ```php
-// =============================================================================
-// Helpers
-// =============================================================================
+// Common for sections needing more work:
+
+// TODO:
+// FIXME:
+
+// Single section marker for easier navigation:
+
+// MARK: Helpers
 ```
 
-Keep the label within the rule; if it runs long, wrap it across lines rather than
-letting it flow past the rule:
+When a section is long enough that folding it away helps, wrap it in `// region` / `// endregion`.
 
 ```php
-// bad: label flows wider than the rule
-
-// =============================================================================
-// Account import: validate every row, then persist the whole batch in one transaction
-// =============================================================================
-
-// good: wrap the label so it stays within the rule
-
-// =============================================================================
-// Account import:
+// region Account import
 // validate every row, then persist the whole batch in one transaction
-// =============================================================================
+
+function account_import(array $rows): int { /* ... */ }
+
+#[Local]
+function account_import_validate_rows(array $rows): array { /* ... */ }
+// endregion
 ```
 
 ## Clear is clever
@@ -245,26 +200,7 @@ assert($b);
 
 Asserts are for bugs, never for input. 
 
-### Control vs data planes
-
-For control planes: setup, routing, decisions. Rare, assert everything. For data planes: the hot loop over bulk data, keep asserts and branches out.
-
-```PHP
-namespace app\parse;
-
-// control plane: cheap to check, check hard
-function scan_start(string $buffer, int $mode): array
-{
-    assert($buffer !== '');
-    assert($mode === Scan::CSV || $mode === Scan::TSV);
-    return scan_run($buffer, $mode);
-}
-
-// data plane: no asserts, no allocation, just the work
-function scan_run(string $buffer, int $mode): array { /* tight loop */ }
-```
-
-Assert freely where it's cheap, stay bare where it's hot.
+For performance, assert freely where it's cheap, stay bare where it's hot like a loop over bulk data to keep branches out.
 
 ## Put a limit on everything
 
@@ -318,7 +254,7 @@ function account_rows_valid(array $rows): bool
 
 Pure leaves test alone and read top to bottom.
 
-## Never nest
+## Be a never nester
 
 Deep nesting hides the path. Return early, handle the bad case, get out. Each level should be the happy path going down, not a staircase.
 
@@ -357,6 +293,30 @@ function account_debit(Account $account, int $amount_cents): bool
 }
 ```
 
+### Split long procedures into steps
+
+Extracting into helpers reads more like prose. When a procedure grows long, ask if it's doing one thing or several. Often it's several, so pull those out and let the parent read as a table of contents.
+
+```PHP
+namespace app\ledger;
+
+// the parent reads like a table of contents
+function account_import(array $rows): int
+{
+    $clean = account_import_rows_clean($rows);
+    $valid = account_import_rows_valid($clean);
+    return account_import_rows_persist($valid);
+}
+
+// TIP: A helper that exists only for account_import keeps the parent name as a
+// prefix and is marked #[Local].
+#[Local]
+function account_import_rows_valid(array $rows): array
+{
+    return $rows;
+}
+```
+
 ## State invariants positively
 
 Say what should be true, not what shouldn't. A positive test reads straight and the boundary is obvious.
@@ -367,22 +327,6 @@ if (!($index >= $count)) { ... }
 
 // clear: the thing that must hold
 if ($index < $count) { ... }
-```
-
-## Long procedures 
-
-Ask if it's doing one thing or several. Often it's several things, you can pull those out so the parent reads as steps.
-
-```PHP
-namespace app\ledger;
-
-// the parent reads like a table of contents
-function account_import(array $rows): int
-{
-    $clean = account_rows_clean($rows);
-    $valid = account_rows_valid($clean);
-    return account_rows_persist($valid);
-}
 ```
 
 ## Long signatures
@@ -409,7 +353,7 @@ function transfer_handle(
 
 ## Pass options explicitly
 
-Spell out the options that matter at the call site. A default that changes under you is a silent bug.
+Spell out the options that matter at the call site, if the defaults change under you it wont be a silent bug.
 
 ```PHP
 use app\ledger;
@@ -423,7 +367,7 @@ $rows = ledger\account_search($query, limit: 50, include_closed: false);
 
 ## Batch work and let the CPU sprint
 
-Big straight runs are much faster than ping ponging between tasks, so amortize it: gather, process, commit in bulk.
+The CPU loves bulk processing best. Big straight runs are much faster than ping ponging between tasks, so amortize it: gather, process, commit in bulk.
 
 ```PHP
 use app\store;
@@ -479,7 +423,7 @@ function tick(queue\RingBuffer $inbox): void
 }
 ```
 
-## No magicians
+## No magic
 
 Code should do what it says. No hidden dispatch, thats just not readable and impossible to make performant.
 
@@ -493,26 +437,9 @@ report\generate($report, Report::Monthly, Report::Pdf);
 
 ## Money as integer
 
-For those who still don't get it, TAKE NOTE.
-
-Money as integer minor units (cents), never a float. Floats round and drift; `0.1 + 0.2` is not `0.3`.
+For those who still don't get it, TAKE NOTE. Represent money as integer minor units (cents), never a float. Floats round and drift; `0.1 + 0.2` is not `0.3`.
 
 Reserve float for measurements.
-
-## Clean up at the edge
-
-A resource opened must be released, even when a panic unwinds.
-
-```PHP
-$lock = lock\acquire($env->locks, $account_id);
-try {
-    return account_settle($account);
-} finally {
-    lock\release($lock);
-}
-```
-
-Keep acquire and release adjacent so a leak is obvious.
 
 ## Few dependencies
 
@@ -520,7 +447,7 @@ Every dependency is code you did not write running in your process: supply-chain
 
 Prefer the standard library and a few lines of your own over a package. Add one only when it clearly earns its keep, and keep it behind your own edge so you can swap it.
 
-## Other
+## Other misc stuff, idk
 
 - Line length 100 columns recommended; exceed only when breaking hurts more.
 - Opening brace on its own line for classes, methods, functions; same line for control structures. Braces always.
