@@ -1,8 +1,12 @@
 # <img alt="Phunk" width="250" src="./assets/phunk.svg">
 
+> [!NOTE]   
+> This is more of a silly, exploratory and for fun kind of project for me. We are doing things that PHP was never really designed for, but, *why* not? Mixed in with other concepts, like application architecture that just so happen to pique my interest for the time being.
+> You can also somewhat view it as a big sink of dirty dishes.
+
 *This is a draft for the PHUNK code style guide and is a W.I.P!*
 
-See [Style](STYLE.md), see [Modules](MODULES.md), See [STDLIB](STDLIB.md)
+[Style](docs/STYLE.md) | [Modules](docs/MODULES.md) | [Standard Library](docs/STDLIB.md)
 
 # Introduction
 
@@ -35,4 +39,4 @@ We want to think about programs more as a series of conveyor belts, and structur
 
 *If you have played Factorio, it can be useful to think about your program as a factory:*
 
-![Factorio Is Literally Just Programming GIF](./assets/factorio-we-do-a-little.gif)
+![Factorio Is Literally Just Programming](./assets/factorio-we-do-a-little.webp)
