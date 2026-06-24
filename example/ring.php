@@ -7,10 +7,10 @@ class RingBuffer
     public int $head = 0;
     public int $tail = 0;
 
-    #[Internal]
+    #![internal]
     public int $capacity = 0;
 
-    #[Internal]
+    #![internal]
     public int $mask = 0;
 
     /** @var list<int> */

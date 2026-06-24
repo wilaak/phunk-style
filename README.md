@@ -6,7 +6,7 @@
 
 *This is a draft for the PHUNK code style guide and is a W.I.P!*
 
-[Style](docs/STYLE.md) | [Modules](docs/MODULES.md) | [Standard Library](docs/STDLIB.md)
+[Overview](docs/GETTING_STARTED.md) | [Style](docs/STYLE.md) | [Modules](docs/MODULES.md) | [Architecture](docs/ARCHITECTURE.md) | [Migrating from DI](docs/MIGRATING_FROM_DI.md) | [Standard Library](docs/STDLIB.md)
 
 # Introduction
 

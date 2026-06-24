@@ -1,5 +1,8 @@
 # Standard Library
 
+> [!WARNING]  
+> No thought was put into this
+
 Super quick sketch of what something like this could look like if you used namespaces as modules
 
 ```php
@@ -209,3 +212,71 @@ fmt\float($x, places: 2)
 fmt\bytes($n)
 fmt\duration($d)
 ```
+
+## References
+
+Use this shit to see what we can *improve* about the current standard lib.
+
+Below is an AI generated survey:
+
+### Critiques
+
+- **PHP: a fractal of bad design** — eevee, 2012. <https://eev.ee/blog/2012/04/09/php-a-fractal-of-bad-design/>
+  The canonical writeup. Its stdlib section names the two headline problems:
+  inconsistent argument order (`array_filter($input, $callback)` vs
+  `array_map($callback, $input)`; `strpos($haystack, $needle)` vs
+  `array_search($needle, $haystack)`) and inconsistent underscores
+  (`strpos`/`str_rot13`, `phpversion`/`php_uname`, `urlencode`/`base64_encode`,
+  `gettype`/`get_class`).
+  **Lesson:** pick ONE argument order and ONE separator rule, never deviate.
+- **PHP Sadness** — a per-item catalogue of the same warts. <http://phpsadness.com/>
+
+### PHP RFCs
+
+- **Consistent Function Names** — Yasuo Ohgaki, 2015. Never adopted (stalled in
+  *Under Discussion*). <https://wiki.php.net/rfc/consistent_function_names>
+  Proposed renaming offending functions with permanent aliases. Most useful for
+  its **five-category taxonomy of inconsistency**, a ready-made checklist:
+  (1) missing module prefixes, (2) omitted/inconsistent underscores
+  (`bcadd` vs `bc_add`), (3) excessive abbreviation (it marks `jf_n_s_i` "Bad"),
+  (4) inconsistent needle/haystack order, (5) mixed casing.
+  **Lesson:** get the convention right up front — retrofitting via aliases never
+  shipped here, and was explicitly rejected in Python (below).
+- **str_contains / str_starts_with / str_ends_with** — PHP 8.0, passed 51–4.
+  <https://wiki.php.net/rfc/str_contains> ·
+  <https://wiki.php.net/rfc/add_str_starts_with_and_ends_with_functions>
+  Added because the old `strpos(...) !== false` idiom is "not very intuitive" and
+  "easy to get wrong." The new family is haystack-first.
+  **Lesson:** ship explicit-intent boolean predicates, not compositions of
+  low-level functions against fragile sentinels.
+- **Saner string to number comparisons** + **Saner numeric strings** — PHP 8.0,
+  ~88% yes. <https://wiki.php.net/rfc/string_to_number_comparison> ·
+  <https://wiki.php.net/rfc/saner-numeric-strings>
+  Killed `0 == "foobar"` being true; non-numeric coercion now throws.
+  **Lesson:** error predictably — throw, don't silently coerce.
+
+### Positive models
+
+- **azjezz/psl** (now `php-standard-library`) — <https://github.com/azjezz/psl>
+  Closest existing thing to this sketch; inspired by HHVM's HSL. Goal: "a
+  consistent, centralized, well-typed set of APIs ... that error predictably,"
+  using typed exceptions and Result/Option instead of `false`/`null`/`-1`.
+  Worth studying for its namespaced layout (`Psl\Str`, `Psl\Vec`, `Psl\Dict`,
+  `Psl\Iter`). Position our design against it.
+- **Symfony String** — <https://symfony.com/doc/current/string.html>
+  Unifies the `str_*`/`mb_*` split into one API across bytes / code points /
+  graphemes. Real-world precedent for our `str` (UTF-8) vs `bytes` split.
+- **Python PEP 8 + PEP 3108** — <https://peps.python.org/pep-0008/> ·
+  <https://peps.python.org/pep-3108/>
+  One `snake_case` convention from the start; Python 3 used the major-version
+  break to rename pre-PEP-8 modules. But PEP 8 concedes "we'll never get this
+  completely consistent," and a later mass-aliasing proposal was killed.
+  **Lesson:** convention up front beats retrofit; greenfield is the right call.
+
+### Unverified / to chase
+
+- The Rasmus Lerdorf anecdote that early function names were sized to a
+  `strlen`-based hash table (the supposed origin of the underscore mess) is
+  widely repeated but **no primary source found** — treat as folklore until sourced.
+- Go's `std` packages and Rust's `std` are often cited as positive models but
+  weren't pinned to a specific PHP-discussion source here — chase if needed.

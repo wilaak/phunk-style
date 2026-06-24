@@ -14,14 +14,14 @@ dependency DAG, and where the graph is wired. For the module unit itself
 
 ## Functional core, imperative shell
 
-Split the program into a pure core and a thin effectful shell. The core decides,
-the shell acts. The core is the leaf modules: values in, values out, no `$env`, no
-I/O, deterministic and testable. The shell is the edge (handlers, workers, CLI)
-that reads the world, calls the core, and writes the result.
+The core decides, the shell acts. The core is the leaf modules: values in, values
+out, no `$env`, no I/O, deterministic and testable. The shell is the edge
+(handlers, workers, CLI) that reads the world, calls the core, and writes the
+result.
 
 Signal the world through `$env`, not naming: a pure function never receives `$env`;
 its presence marks the shell. Between the two sits a function that mutates its
-arguments and nothing else: not pure, but the effect is in the signature
+arguments and nothing else — not pure, but the effect is in the signature
 (`account_deposit`, the out-parameter pattern).
 
 The shape is gather, decide, commit: read every input up front, hand plain values
@@ -45,24 +45,105 @@ function transfer_handle(env\Env $env, transfer\Request $request): transfer\Resu
 }
 ```
 
-Keeping the decision pure makes it testable without a database and keeps
-irreversible writes in one auditable place. No globals; shared infrastructure
-travels through `$env`. Pass a function only the data it needs.
+A pure decision is testable without a database and keeps irreversible writes in one
+auditable place. No globals; shared infrastructure travels through `$env`. Pass a
+function only the data it needs.
 
-Prefer commands to return `void` and queries to be pure, but a command-query that
-both mutates and reports is welcome when every effect is in the signature
+Prefer commands to return `void` and queries to be pure. A command-query that both
+mutates and reports is welcome when every effect is in the signature
 (`ledger\transfer` mutates two accounts and returns a `TransferStatus`). What this
 bans is a hidden effect behind something shaped like a query.
 
-Modules form a DAG: shell modules sit above core and call down. Two siblings never
-import each other; an operation needing both belongs in the layer above.
+Modules form a DAG: shell sits above core and calls down. Two siblings never import
+each other; an operation needing both belongs in the layer above.
 
 ## Cross-container operations
 
-When one operation coordinates two containers from the same module (a transfer
-between two accounts), give it a function taking both as explicit arguments, in the
-module that owns the types. An operation spanning two modules belongs in the layer
-above both, never inside either.
+One operation coordinating two containers from the same module (a transfer between
+two accounts) gets a function taking both as explicit arguments, in the module that
+owns the types. An operation spanning two modules belongs in the layer above both,
+never inside either.
+
+## Fans and chains
+
+Gather/decide/commit says read inputs up front — but when the inputs are themselves
+the product of I/O, how do you read them? Batch by dependency, not by kind. Two
+reads being the same operation (both queries) is not a reason to batch; being
+independent of each other is.
+
+A **fan** is a set of reads that do not depend on each other: you know every key up
+front. Issue them together and await once, so the gather stays a single auditable
+edge and the cost is the slowest read, not their sum. The decide step then sees the
+whole batch.
+
+```php
+// fan: every id is known up front, so gather them in one await
+$accounts = co\map($ids, fn ($id) => store\account_load($env->database, $id));
+
+$totals = slice\map($accounts, ledger\account_total);   // decide, over the batch
+store\account_save_all($env->database, $accounts);       // commit
+```
+
+Spreading those awaits inline (`load, use, load, use`) costs the sum of every
+latency and smears the I/O boundary across the function.
+
+A **chain** is a read whose key comes from the previous read: you cannot know step
+N+1 until step N resolves. A chain cannot be batched, so do not try. The boring
+linear form is the most readable form here; forcing it into stages only hides the
+dependency:
+
+```php
+// chain: each read names the next; sequential is correct, not a smell
+$manifest = store\manifest_load($env->database, $root_id);
+$head     = store\account_load($env->database, $manifest->head_id);
+$settled  = store\account_load($env->database, $head->settled_into_id);
+return ledger\reconcile($settled);
+```
+
+Push the fan down into one gather, keep the chain local and linear. Most real
+gathers are a short chain of fans — resolve one set, use it to compute the next set
+of keys, fan those.
+
+### Chains across a loop
+
+A chain inside one request handler is just sequential code. A chain inside a
+long-running loop, where blocking on a slow read stalls every other item, is
+different: there you rotate the chain onto the loop's time axis. Instead of one
+suspended call stack per item parked at `read → wait → use`, each item carries a
+flag for the stage it is on, and every tick advances the whole population one stage.
+The conveyor belt becomes literal — each belt segment is a set, each tick moves
+items between segments, every item at a segment is processed in bulk.
+
+The working sets are the loop's own mutable state, so they live in a `Loop` value
+the loop owns, never on the `readonly` `$env`. `$env` carries capabilities; the
+`Loop` carries the population moving through the belt.
+
+```php
+// each tick: advance every item one stage, in bulk per stage.
+function tick(env\Env $env, Loop $loop): void
+{
+    // segment 1 -> 2: items whose read has landed move to the ready set
+    foreach ($loop->awaiting_read as $id => $item) {
+        if (!store\read_ready($env->database, $id)) {
+            continue;
+        }
+        $item->data = store\read_take($env->database, $id);
+        $loop->ready[$id] = $item;
+        unset($loop->awaiting_read[$id]);
+    }
+
+    // segment 2 -> done: decide over the whole ready set at once
+    foreach ($loop->ready as $id => $item) {
+        $item->result = ledger\settle($item->data);   // pure decide
+    }
+    $loop->ready = [];
+}
+```
+
+This is why the loop scales state: never a backlog of N parked stacks, only a
+handful of sets and one pass that advances all of them. Reach for it only when
+latency forbids blocking — a short chain in a request handler stays plain
+sequential code.
 
 ## No premature abstraction
 
@@ -134,6 +215,21 @@ it into a god object; each package exports its own narrow pair:
 When wiring grows long, give each package one `pkg\boot(Config): Deps`, so the root
 stays a linear list of `$x = pkg\boot($config)` calls.
 
+The split is at the **package** boundary — a cluster of modules that lifts out as
+its own reusable, separately-bootable unit (see [MODULES.md](MODULES.md)) — never
+per-module. A `Deps` per module inside one app trades the god object for wiring
+sprawl: most modules share the same handful of capabilities, so minting one env
+each is ceremony with no payoff. Two cheaper tools handle the common case first:
+
+- **Narrow the call, not the env.** Below the shell edge, functions take the one
+  capability they use (`\PDO $database`, `Clock $clock`), not the whole `$env`. The
+  env exists at the edge; deep in the core, nothing carries it.
+- **Stay pure deeper still.** Core leaves take values and return values, so the
+  question of which env they get never arises.
+
+Reach for a package's own `Config`/`Deps` only when the cluster has an independent
+reason to be reused or booted on its own.
+
 ## Composition root
 
 The composition root is the `main()` of an executable: the one impure function, in
@@ -202,10 +298,10 @@ function serve(env\Env $env, \Swoole\Http\Request $req, \Swoole\Http\Response $r
 ```
 
 `$server->on('request', ...)` is inversion of control: the framework owns the loop.
-Keep the callback a one-line adapter and the inside an explicit value assembly
-line, with `\Swoole\Http\*` confined to `serve`'s signature; below `serve`
-everything sees `Request` in, `Response` out. When you own the loop instead, write
-a loop, not a callback.
+Keep the callback a one-line adapter and the inside an explicit value assembly line,
+with `\Swoole\Http\*` confined to `serve`'s signature; below `serve` everything sees
+`Request` in, `Response` out. When you own the loop instead, write a loop, not a
+callback.
 
 Selecting an implementation is constructing a different value at step 2: a real
 `\PDO` or a fake, `clock\FixedClock` instead of `clock\SystemClock`. The handler is

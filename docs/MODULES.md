@@ -8,7 +8,7 @@ For more about how to compose an app (core/shell, the DAG, wiring), see [ARCHITE
 
 - A module is a namespace: one flat word under a vendor root. The directory mirrors it.
 - Import the namespace, not the symbol; keep the prefix at the call site.
-- Mark internals `#[Internal]`, file-locals `#[Local]`; unmarked is public.
+- Mark internals `#![internal]`, file-locals `#![local]`; unmarked is public.
 - Load every module/file at startup with instead of PSR-4 lazy-loading.
 
 ## What a module owns
@@ -78,11 +78,11 @@ Add a directory only when a real module emerges. Files in one module call each o
 
 A group is the one exception, and only one tier deep. Three or more modules of the same kind (payment providers, codecs, hashes) may share a directory: `app\payment\stripe`, `app\payment\paypal`, `app\payment\klarna`.
 
-The group is a directory, not a module: no behavior, and it grants no shared visibility (`app\payment\stripe` cannot reach `app\payment\paypal`'s `#[Internal]` symbols).
+The group is a directory, not a module: no behavior, and it grants no shared visibility (`app\payment\stripe` cannot reach `app\payment\paypal`'s `#![internal]` symbols).
 
 Call sites stay flat: `use app\payment\stripe;` then `stripe\charge()`. If you cannot name the family as N variations on one noun, it is not a group.
 
-Modules that lift out together with their own config and deps are a package, the unit of reuse.
+Modules that lift out together with their own config and deps are a package, the unit of reuse. The package — not the individual module — is the boundary at which dependencies split into their own `Config`/`Deps` pair instead of riding the app-wide `$env` (see [ARCHITECTURE.md](ARCHITECTURE.md), *Past one application*).
 
 ## Imports
 
@@ -123,8 +123,8 @@ Don't alias to a short token (`use app\ledger as l;`); that strips context.
 
 PHP has no module-private visibility, so two attributes add it:
 
-- `#[Internal]`: module-private, the default. Visible in the namespace, invisible outside.
-- `#[Local]`: file-private. Rare.
+- `#![internal]`: module-private, the default. Visible in the namespace, invisible outside.
+- `#![local]`: file-private. Rare.
 - Unmarked is public.
 
 ## Module boundaries
@@ -135,7 +135,7 @@ Three questions decide where a boundary falls:
 - Change. One reason to change? Two reasons, two modules.
 - Dependency. Depends downward only? If two candidates reference each other, they are one module.
 
-The public surface is whatever is unmarked; `#[Internal]` and `#[Local]` hide the rest. The markers are the source of truth, so a linter or tool can list a module's public API on demand. No hand-written header to drift.
+The public surface is whatever is unmarked; `#![internal]` and `#![local]` hide the rest. The markers are the source of truth, so a linter or tool can list a module's public API on demand. No hand-written header to drift.
 
 Three properties make a boundary honest:
 

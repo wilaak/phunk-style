@@ -4,9 +4,11 @@ We draw inspiration from the excellent [TigerStyle](https://github.com/tigerbeet
 
 ## Syntax casing
 
-> [!NOTE]   
-> snake_case namespaces are deliberately against the usual PascalCase to avoid the confusion with types.
-> Built-in and third-party that break this keep their source casing, we can't do much about that.
+snake_case namespaces are deliberately against the usual PascalCase to avoid the confusion with types.
+
+> Note: *modifiers* (`#![local]`, `#![internal]`), not types. The `#!` prefix makes them comments.
+
+Built-in and third-party that break this keep their source casing, we can't do much about that.
 
 | Construct                     | Casing             | Example                    |
 | ----------------------------- | ------------------ | ----------------           |
@@ -25,13 +27,14 @@ We draw inspiration from the excellent [TigerStyle](https://github.com/tigerbeet
 | Array key, string             | `snake_case`       | `'order_line'`             |
 | Constant                      | `UPPER_SNAKE_CASE` | `MAX_SIZE`                 |
 | Goto label                    | `UPPER_SNAKE_CASE` | `PARSE_END`                |
+| Attribute, modifier           | `snake_case`       | `#![internal]`             |
+| Attribute, class              | `PascalCase`       | `#[Route]`                 |
 
 Treat acronyms as words: first letter cased per the rule, the rest lowercase.
 
 - `HttpClient`, not `HTTPClient`
 - `parseXmlId()`, not `parseXMLID()`
 - `$user_id`, not `$user_iD`
-
 
 ## Naming things
 
@@ -45,13 +48,13 @@ Longer names are be fine so long as they are doing their job by being explicit a
 
 Please refer to the very scientific graph below:
 
-![Naming discoverability chart](./assets/naming-things-discoverability.webp)
+![Naming discoverability chart](../assets/naming-things-discoverability.webp)
 
 ## Error handling
 
 Expected failures are values and not exceptions. Reserve exceptions for the genuinely exceptional: failures with no meaningful local handling, like running out of memory or a missing required config at startup, where the only sane response is to crash fast. Always handle errors and never ignore a return.
 
-Below is an example of using a union for explicit error handling, you many also use the nullable return `?T` for more obvious errors.
+Below is an example of using a union `T|ErrorEnum` for explicit error handling, you may also use the nullable return `?T` for more obvious errors.
 
 ```PHP
 namespace app\ledger;
@@ -102,6 +105,30 @@ function account_debit_page(
         ledger\AccountError::NotFound          => http\not_found(),
     };
 }
+```
+
+You can back the enum when each case carries a fixed, stable payload, like a message to show. The value travels with the case, so you don't reach for a struct.
+
+```PHP
+namespace app\ledger;
+
+enum AccountError: string
+{
+    case NotFound          = 'account_not_found';
+    case Frozen            = 'account_frozen';
+    case InsufficientFunds = 'insufficient_funds';
+}
+```
+
+The caller still branches on the case; it just reads `->value` where it needs the wire form.
+
+```PHP
+$result = ledger\account_debit($account, $amount_cents);
+if ($result instanceof ledger\Account) {
+    return http\ok($result);
+}
+
+return http\error($result->value);
 ```
 
 ### Clean up at the edge
@@ -179,7 +206,7 @@ When a section is long enough that folding it away helps, wrap it in `// region`
 
 function account_import(array $rows): int { /* ... */ }
 
-#[Local]
+#![local]
 function account_import_validate_rows(array $rows): array { /* ... */ }
 // endregion
 ```
@@ -315,8 +342,8 @@ function account_import(array $rows): int
 }
 
 // TIP: A helper that exists only for account_import keeps the parent name as a
-// prefix and is marked #[Local].
-#[Local]
+// prefix and is marked #![local].
+#![local]
 function account_import_rows_valid(array $rows): array
 {
     return $rows;
