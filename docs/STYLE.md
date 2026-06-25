@@ -218,7 +218,7 @@ Write the boring version. The reader should not have to decode. Simple is hard, 
 Always say why.
 
 ```PHP
-// clever: decode it line by line
+// bad: hard to read
 $b = $items[($h = crc32($k)) % $n];
 
 // simple: just read it
@@ -428,7 +428,7 @@ You can also coalesce while you are there, collapsing ten "dirty" events into on
 
 The queue smooths the world. A bounded queue gives you backpressure, so under load you shed or reject instead of falling over, and bursts flatten into a steady rate with predictable latency.
 
-And the statistics practically fall out from it. Queue depth is load, items per tick is throughput, time per tick is latency.
+And the statistics practically fall out from it: queue depth is load, items per tick is throughput, time per tick is latency.
 
 ```PHP
 namespace app\worker;
@@ -456,16 +456,22 @@ function tick(queue\RingBuffer $inbox): void
 }
 ```
 
+## One source of truth
+
+> Give a man a state and he'll have a bug one day, but teach him to represent state in two separate locations that have to be kept in sync and he'll have bugs for a lifetime.
+
+Never duplicate a variable to remember a value: two sources of truth diverge. Compute or pass it, close to where it is used. Consolidate mutation: the fewer points that can write a value, the easier it is to reason about.
+
 ## No magic
 
 Code should do what it says. No hidden dispatch, thats just not readable and impossible to make performant.
 
 ```PHP
-// bad: __call hides where this goes, and nothing is greppable
-$report->generateMonthlyPdf();
+// bad: __call parses the method name into a query; the columns aren't greppable
+$user = $users->findByEmailAndStatus($email, Status::Active);
 
 // good: a real function you can jump to and grep
-report\generate($report, Report::Monthly, Report::Pdf);
+$user = store\user_find($db, email: $email, status: Status::Active);
 ```
 
 ## Money as integer
@@ -475,6 +481,16 @@ For those who still don't get it, TAKE NOTE. Represent money as integer minor un
 You can image a float as two dials that together give an estimate of a number: reserve floats for measurements that don't need to be 100% accurate.
 
 Here are pretty visuals and story telling about [fundamental types in C](https://www.youtube.com/watch?v=GTNFrLZ5P1A) that gets that point across.
+
+## Off-by-one
+
+Index, count, and size are distinct:
+
+| Concept | Meaning              | Conversion                          |
+|---------|----------------------|-------------------------------------|
+| Index   | Zero-based offset    | index + 1 = count for a single item |
+| Count   | Number of items      | count * unit_bytes = size_bytes     |
+| Size    | Byte or unit measure |                                     |
 
 ## Few dependencies
 

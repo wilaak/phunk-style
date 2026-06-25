@@ -1,109 +1,79 @@
 # Modules
 
-We jerry-rig namespaces to function as modules. PHP doesn't have any "real" sense of what a module is, so this is what we got.
-
-For more about how to compose an app (core/shell, the DAG, wiring), see [ARCHITECTURE.md](ARCHITECTURE.md).
-
-## Quick rules
-
-- A module is a namespace: one flat word under a vendor root. The directory mirrors it.
-- Import the namespace, not the symbol; keep the prefix at the call site.
-- Mark internals `#![internal]`, file-locals `#![local]`; unmarked is public.
-- Load every module/file at startup with instead of PSR-4 lazy-loading.
-
-## What a module owns
-
-A module owns a family of types and the functions over them. `ledger` owns `Account`, `Transfer`, and `TransferStatus`; `account_debit` lives there because `Account` does.
-
-A few modules own only operations over primitives or foreign types (`util`, an `http` edge).
-
-Err coarse. A module is a subsystem, not a single type. A namespace per class fragments into wiring sprawl. Split only when a real subsystem emerges.
+A module owns a family of types and the functions over them. It is a subsystem, not a single type.
 
 ## Naming
 
-Name it for the prefix it becomes (`ledger\transfer`):
+Name the module for the prefix it becomes (`ledger\account_load()`):
 
-- One short noun, `snake_case`: `ledger`, `store`, `http`, `cpu`. It prefixes hundreds of calls; long is noise.
-- Name the subsystem, not a type: `ledger`, not `account`. The module prefix carries the subsystem, the function prefix the type.
-- It must read as a prefix: `store\account_load()`, `http\request_parse()`.
-- No dumping grounds (`common`, `shared`, `helpers`, `misc`, `core`); `util` is the one exception.
+- One short noun, `snake_case`: `ledger`, `store`, `http`, `cpu`.
+- The subsystem, not a type: `ledger`, not `account`.
+- Reads as a prefix: `store\account_load()`, `http\request_parse()`.
 - No stutter: not `app\ledger_module`, not `ledger\ledger_transfer`.
 
-## Layout on disk
-
-A module is `vendor\module`, one flat word below the root: `app\catalog`, `app\ledger`. The directory mirrors the namespace, so each directory under `app/` is a module (`app\http`, `app\catalog`).
-
-Another `\` means another module, not a submodule, unless it is a group tier.
+## Layout example
 
 ```
-📁 src/
-  📁 app/
-    📁 http/
-      📄 request.php
-      📄 response.php
-      📄 router.php
-    📁 auth/
-      📄 session.php
-      📄 password.php
-    📁 catalog/
-      📄 product.php
-      📄 category.php
-      📄 search.php
-    📁 orders/
-      📄 cart.php
-      📄 order.php
-      📄 checkout.php
-    📁 ledger/
-      📄 account.php
-      📄 transfer.php
-    📁 store/
-      📄 account_store.php
-      📄 order_store.php
-    📁 payment/
-      📁 stripe/
-        📄 charge.php
-        📄 refund.php
-      📁 paypal/
-        📄 charge.php
-      📁 klarna/
-        📄 charge.php
-    📁 util/
-      📄 clamp.php
-      📄 uuid.php
+src/
+  app/
+    http/
+      request.php
+      response.php
+      router.php
+    catalog/
+      product.php
+      category.php
+      search.php
+    ledger/
+      account.php
+      transfer.php
+    store/
+      account_store.php
+      order_store.php
+    payment/
+      stripe/
+        charge.php
+        refund.php
+      paypal/
+        charge.php
+      klarna/
+        charge.php
+    util/
+      clamp.php
+      uuid.php
 ```
 
-Most modules are flat (`app\catalog`), one word under the root. Many files in one directory is the goal. Near-empty directory trees hide the module and add path noise.
+## Module, package, grouping directory
 
-Add a directory only when a real module emerges. Files in one module call each other unqualified.
+| Unit               | Is the unit of              | Boundary marker                |
+| ------------------ | --------------------------- | ------------------------------ |
+| Module             | organization and visibility | `#![internal]` surface         |
+| Package            | reuse and dependencies      | own env (`Config`/`Deps`, `boot()`) |
+| Grouping directory | navigation                  | none, just a folder            |
 
-A group is the one exception, and only one tier deep. Three or more modules of the same kind (payment providers, codecs, hashes) may share a directory: `app\payment\stripe`, `app\payment\paypal`, `app\payment\klarna`.
+The package, not the module, is the only boundary where dependencies stop riding the app-wide `$env` and split into `Config`/`Deps`.
 
-The group is a directory, not a module: no behavior, and it grants no shared visibility (`app\payment\stripe` cannot reach `app\payment\paypal`'s `#![internal]` symbols).
+Don't mint a pair per module; that trades the god `$env` for wiring sprawl.
 
-Call sites stay flat: `use app\payment\stripe;` then `stripe\charge()`. If you cannot name the family as N variations on one noun, it is not a group.
+### Package-level env
 
-Modules that lift out together with their own config and deps are a package, the unit of reuse. The package — not the individual module — is the boundary at which dependencies split into their own `Config`/`Deps` pair instead of riding the app-wide `$env` (see [ARCHITECTURE.md](ARCHITECTURE.md), *Past one application*).
+A package that lifts out carries its own env: a narrow `Config` (pure data) and `Deps` (capabilities), built once by `pkg\boot(Config): Deps`. That pair is the custom, package-scoped env, separate from the app-wide `$env`.
+
+Modules do not get their own env inside one app. Below the package boundary a function takes the one capability it needs (`\PDO $database`, `Clock $clock`), never a bespoke env.
+
+## Visibility
+
+PHP has no module-private visibility, so two comment-modifiers add it:
+
+- `#![internal]`: module-private.
+- `#![local]`: file-private.
+- Unmarked: public.
 
 ## Imports
 
-Import the namespace, not the symbol: `use app\util;` then `util\clamp()`.
-
-The prefix names the origin and stays greppable. `use function` and `use const` strip it; forbidden.
-
-Class imports (`use app\ledger\Account;`) are fine.
+Import the namespace, not the symbol. The prefix names the origin and stays greppable. Exceptions being if it's actually more readable to do import the full name.
 
 ```php
-// avoid: symbol import strips the origin
-use function app\util\clamp;
-$v = clamp($x, $lo, $hi);
-
-// good: namespace import keeps the prefix
-use app\util;
-$v = util\clamp($x, $lo, $hi);
-```
-
-```php
-// a lone import can stay one line
 use app\util;
 
 use app\{
@@ -114,33 +84,50 @@ use app\{
 };
 ```
 
-Alias to break a collision, not to shorten, and keep the origin:
+## Core and shell
 
-- Leaf collision: `use acme\json as acme_json;` then `acme_json\decode()`.
-- Class collision: `use app\ledger\Account as LedgerAccount;`.
+Split a module into a pure core and a thin shell.
 
-Don't alias to a short token (`use app\ledger as l;`); that strips context.
+- **Core.** Free functions over data. No I/O, no `$env`, no external mutation.
+- **Shell.** The edge that holds `$env`, performs I/O, and calls the core.
 
-PHP has no module-private visibility, so two attributes add it:
+The shape is gather, decide, commit. Gather and commit live in the shell; decide is pure. 
 
-- `#![internal]`: module-private, the default. Visible in the namespace, invisible outside.
-- `#![local]`: file-private. Rare.
-- Unmarked is public.
+Never interleave I/O with logic: read everything up front, compute, then write.
 
-## Module boundaries
+A bug in the core is found by following its values; an effect only happens at the shell, where you can see it.
 
-Three questions decide where a boundary falls:
+```php
+// shell: holds $env, does the I/O, calls the pure core
+function order_settle(env\Env $env, int $order_id): Result
+{
+    $order  = store\order_load($env->database, $order_id);   // gather
+    $priced = ledger\order_price($order);                    // decide (pure)
+    store\order_save($env->database, $priced);               // commit
+    return Result::Ok;
+}
+```
 
-- Name. One noun? If it needs an `and`, two modules.
-- Change. One reason to change? Two reasons, two modules.
-- Dependency. Depends downward only? If two candidates reference each other, they are one module.
+## Dependency DAG
 
-The public surface is whatever is unmarked; `#![internal]` and `#![local]` hide the rest. The markers are the source of truth, so a linter or tool can list a module's public API on demand. No hand-written header to drift.
+Modules form a directed acyclic graph. A module may depend on those below it, never on those above, and never in a cycle. If A uses B, B does not use A. Shared lower-level needs sink into a module both depend on (`util`, `store`).
 
-Three properties make a boundary honest:
+Two modules that reference each other are not two modules; they are one, or a third module is hiding between them. The bottom of the graph is data and pure functions; capabilities and I/O enter at the top, through the shell.
 
-- Self-contained. Everything from outside arrives through a signature: data as arguments, capabilities through `$env`. No reaching into another module's internals, no globals.
-- One direction. Dependencies point down the DAG only.
-- Stable surface. The public surface changes only when the contract does.
+The app is the root and `util` is a leaf. Build order is a topological sort: a package's `boot()` runs after the things it depends on.
 
-If you cannot say what the module does in a line, it owns more than one noun.
+## Boundaries
+
+Where a boundary falls, three questions:
+
+- **Name.** One noun? If it needs an `and`, two modules.
+- **Change.** One reason to change? Two reasons, two modules.
+- **Dependency.** Downward only? If two candidates reference each other, they are one module.
+
+An honest boundary is:
+
+- **Self-contained.** Everything external arrives through a signature: data as arguments, capabilities through `$env`. No reaching into internals, no globals.
+- **One-directional.** Dependencies point down the DAG only.
+- **Stable.** The public surface changes only when the contract does.
+
+If you cannot say what a module does in one line, it owns more than one noun.

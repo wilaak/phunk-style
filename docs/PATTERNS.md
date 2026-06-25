@@ -1,17 +1,12 @@
 # Patterns
 
-Replicate modern-language control flow in PHP, without the machinery.
+Replicate language control flows in PHP
 
 ## Dispatch: closed set vs open set
-
-A closed set of variants — known when you write the code — is an enum, dispatched
-by one central `match`. Polymorphism becomes a value on the belt; dispatch becomes
-a switch.
 
 ```php
 namespace app\notify;
 
-// The "interface" Notifier with send() becomes a tag...
 enum Channel
 {
     case Email;
@@ -19,8 +14,6 @@ enum Channel
     case Push;
 }
 
-// ...and the "implementations" become arms of one central match: no closure, no
-// interface, no object, just data in and a free function per arm.
 function notify_send(Channel $channel, Message $message): Result
 {
     return match ($channel) {
@@ -36,10 +29,17 @@ function notify_send(Channel $channel, Message $message): Result
 | Variants known at authoring time (a closed set) | enum + central `match`  |
 | Variants registered by strangers at runtime     | single-method interface |
 
-## Sum type with data
+## Guard ladder
 
-An enum is a tag with no fields. When a variant carries data, give each variant a
-record and return a union; `match` on the type.
+```php
+$tier = match (true) {
+    $score >= 100 => Tier::Gold,
+    $score >= 10  => Tier::Silver,
+    default       => Tier::Bronze,
+};
+```
+
+## Sum type with data
 
 ```php
 class Circle
@@ -61,3 +61,33 @@ function shape_area(Circle|Rectangle $shape): float
     };
 }
 ```
+## Newtype
+
+Wrap an identifier or a primitive that crosses a boundary in a one-field `readonly` class, so the type separates values a raw `int` would conflate.
+
+```php
+namespace app\ledger;
+
+readonly class AccountId
+{
+    function __construct(
+        public int $value
+    ) {}
+}
+```
+
+## Error conversion at the boundary
+
+A module's error enum is part of its public surface; a foreign one is not.
+
+```php
+$row = store\account_load($db, $id);
+if ($row instanceof store\LoadError) {
+    return match ($row) {
+        store\LoadError::NotFound => ledger\AccountError::NotFound,
+        store\LoadError::Timeout  => ledger\AccountError::Unavailable,
+    };
+}
+```
+
+The caller branches on the enum, not on the internals of whatever you called.
