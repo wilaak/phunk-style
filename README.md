@@ -1,4 +1,4 @@
-# <img alt="Phunk" width="150" src="./assets/phunk-text.svg">
+# <img alt="Phunk" width="250" src="./assets/phunk/lock/phunk-lock-tilt-dynamic.svg">
 
 > [!NOTE]   
 > We are doing things that PHP was never really designed for, but, *why* not?
