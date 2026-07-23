@@ -4,11 +4,7 @@ We draw inspiration from the excellent [TigerStyle](https://github.com/tigerbeet
 
 ## Syntax casing
 
-snake_case namespaces are deliberately against the usual PascalCase to avoid the confusion with types.
-
-> Note: *modifiers* (`#![local]`, `#![internal]`), not types. The `#!` prefix makes them comments.
-
-Built-in and third-party that break this keep their source casing, we can't do much about that.
+snake_case namespaces are deliberately against the usual PascalCase to avoid the confusion with types. Built-in and third-party that break this keep their source casing, we can't do much about that.
 
 | Construct                     | Casing             | Example                    |
 | ----------------------------- | ------------------ | ----------------           |
@@ -27,7 +23,6 @@ Built-in and third-party that break this keep their source casing, we can't do m
 | Array key, string             | `snake_case`       | `'order_line'`             |
 | Constant                      | `UPPER_SNAKE_CASE` | `MAX_SIZE`                 |
 | Goto label                    | `UPPER_SNAKE_CASE` | `PARSE_END`                |
-| Attribute, modifier           | `snake_case`       | `#![internal]`             |
 | Attribute, class              | `PascalCase`       | `#[Route]`                 |
 
 Treat acronyms as words: first letter cased per the rule, the rest lowercase.
@@ -38,9 +33,7 @@ Treat acronyms as words: first letter cased per the rule, the rest lowercase.
 
 ## Naming things
 
-Prioritize naming and flow: if code reads naturally, comments are mostly for non-obvious constraints.
-
-Avoid excessive abbreviations with exceptions being things like loop counters or a similar vein. Try using a concept per name, and avoid reusing a name for two concepts in one scope.
+Prioritize naming and flow: if code reads naturally, comments are mostly for non-obvious constraints. Avoid excessive abbreviations with exceptions being things like loop counters or a similar vein. Try using a concept per name, and avoid reusing a name for two concepts in one scope.
 
 Try keeping related names at similar length and balance as they are easier to scan side by side. Append units by descending significance so related names group: `$latency_ms_max`, `$size_bytes_total`.
 
@@ -54,8 +47,6 @@ Please refer to the very scientific graph below:
 
 Expected failures are values and not exceptions. Reserve exceptions for the genuinely exceptional: failures with no meaningful local handling, like running out of memory or a missing required config at startup, where the only sane response is to crash fast. Always handle errors and never ignore a return.
 
-Below is an example of using a union `T|ErrorEnum` for explicit error handling, you may also use the nullable return `?T` for more obvious errors.
-
 ```PHP
 namespace app\ledger;
 
@@ -66,20 +57,28 @@ enum AccountError
     case InsufficientFunds;
 }
 
+final readonly class DebitResult
+{
+    function __construct(
+        public ?Account      $account = null,
+        public ?AccountError $error = null,
+    ) {}
+}
+
 function account_debit(
     Account $account,
     int     $amount_cents,
-): Account|AccountError
+): DebitResult
 {
     if ($account->frozen) {
-        return AccountError::Frozen;
+        return new DebitResult(error: AccountError::Frozen);
     }
     if ($account->balance_cents < $amount_cents) {
-        return AccountError::InsufficientFunds;
+        return new DebitResult(error: AccountError::InsufficientFunds);
     }
 
     $account->balance_cents -= $amount_cents;
-    return $account;
+    return new DebitResult(account: $account);
 }
 ```
 
@@ -95,15 +94,31 @@ function account_debit_page(
 ): http\Response
 {
     $result = ledger\account_debit($account, $amount_cents);
-    if ($result instanceof ledger\Account) {
-        return http\ok($result);
+    if ($result->error === null) {
+        return http\ok($result->account);
     }
 
-    return match ($result) {
-        ledger\AccountError::Frozen            => http\conflict('frozen'),
-        ledger\AccountError::InsufficientFunds => http\payment_required(),
-        ledger\AccountError::NotFound          => http\not_found(),
+    return match ($result->error) {
+        ledger\AccountError::Frozen
+            => http\conflict('frozen'),
+        ledger\AccountError::InsufficientFunds
+            => http\payment_required(),
+        ledger\AccountError::NotFound
+            => http\not_found(),
     };
+}
+```
+
+A union return `T|ErrorEnum` is also acceptable when a dedicated result class feels heavy, and the nullable return `?T` works for more obvious errors.
+
+```PHP
+function account_debit(
+    Account $account,
+    int     $amount_cents,
+): Account|AccountError
+{
+    // same body, returning $account or an AccountError case directly.
+    // Branch using an instanceof check after call.
 }
 ```
 
@@ -124,11 +139,11 @@ The caller still branches on the case; it just reads `->value` where it needs th
 
 ```PHP
 $result = ledger\account_debit($account, $amount_cents);
-if ($result instanceof ledger\Account) {
-    return http\ok($result);
+if ($result->error === null) {
+    return http\ok($result->account);
 }
 
-return http\error($result->value);
+return http\error($result->error->value);
 ```
 
 ### Clean up at the edge
@@ -185,30 +200,23 @@ Prefer to use `//` comments for consistency and reserve `/** */` docblocks for t
 
 ### Mark sections
 
-For large files, it can be useful to mark your sections for navigation, these are easy to search for and can aid in navigating quicker.
+For large files, it *can* be useful to mark your sections for navigation.
 
 ```php
+//
 // Common for sections needing more work:
+//
 
+// Example:
 // TODO:
 // FIXME:
 
+//
 // Single section marker for easier navigation:
+//
 
+// Example:
 // MARK: Helpers
-```
-
-When a section is long enough that folding it away helps, wrap it in `// region` / `// endregion`.
-
-```php
-// region Account import
-// validate every row, then persist the whole batch in one transaction
-
-function account_import(array $rows): int { /* ... */ }
-
-#![local]
-function account_import_validate_rows(array $rows): array { /* ... */ }
-// endregion
 ```
 
 ## Clear is clever
@@ -333,6 +341,8 @@ Extracting into helpers reads more like prose. When a procedure grows long, ask 
 ```PHP
 namespace app\ledger;
 
+use phunk\module;
+
 // the parent reads like a table of contents
 function account_import(array $rows): int
 {
@@ -342,8 +352,8 @@ function account_import(array $rows): int
 }
 
 // TIP: A helper that exists only for account_import keeps the parent name as a
-// prefix and is marked #![local].
-#![local]
+// prefix and is marked #[module\Local].
+#[module\Local]
 function account_import_rows_valid(array $rows): array
 {
     return $rows;
@@ -368,14 +378,14 @@ One line while it fits the 100 columns. When it doesn't, one parameter per line,
 
 ```PHP
 // fits: keep it on one line
-function account_debit(Account $account, int $amount_cents): Account|AccountError
+function account_debit(Account $account, int $amount_cents): DebitResult
 {
     // ...
 }
 
 // too long: one per line, types and names as two aligned columns
 function transfer_handle(
-    env\Env          $env,
+    app\Env          $env,
     transfer\Request $request,
     transfer\Options $options,
 ): transfer\Result
@@ -462,18 +472,6 @@ function tick(queue\RingBuffer $inbox): void
 
 Never duplicate a variable to remember a value: two sources of truth diverge. Compute or pass it, close to where it is used. Consolidate mutation: the fewer points that can write a value, the easier it is to reason about.
 
-## No magic
-
-Code should do what it says. No hidden dispatch, thats just not readable and impossible to make performant.
-
-```PHP
-// bad: __call parses the method name into a query; the columns aren't greppable
-$user = $users->findByEmailAndStatus($email, Status::Active);
-
-// good: a real function you can jump to and grep
-$user = store\user_find($db, email: $email, status: Status::Active);
-```
-
 ## Money as integer
 
 For those who still don't get it, TAKE NOTE. Represent money as integer minor units (cents), never a float. Floats round and drift; `0.1 + 0.2` is not `0.3`.
@@ -497,10 +495,3 @@ Index, count, and size are distinct:
 Every dependency is code you did not write running in your process: supply-chain risk, version churn, and surface you cannot see.
 
 Prefer the standard library and a few lines of your own over a package. Add one only when it clearly earns its keep, and keep it behind your own edge so you can swap it.
-
-## Other misc stuff, idk
-
-- Line length 100 columns recommended; exceed only when breaking hurts more.
-- Opening brace on its own line for classes, methods, functions; same line for control structures. Braces always.
-- One blank line after the namespace and after the `use` block, and between functions.
-- Trailing commas in multi-line arrays and argument lists.

@@ -1,57 +1,46 @@
 # Optimizations
 
-As usual, measure first. For optimizing code your typical subjects will be memory access and locality.
+As usual, measure first. For optimizing code your typical subjects will be memory access and locality. This is not an in depth guide, just some simple tricks that may or may not suit your situation. 
 
-## Bulk data: do not use objects
+## Bulk data: avoid many objects
 
-Objects are expensive and each ZVAL is a pointer to a scattered heap.
+Objects are expensive: every variable referencing it is a ZVAL with a pointer to a scattered heap address. Iterating over a list of objects will make the machinery in your CPU that makes it go fast stop working. You will have sub optimial performance.
 
-Each object element costs a 56-byte allocation (40-byte header plus 16-byte ZVAL) reached by a pointer. Iterating a collection of them is a dependent-load chain that defeats the prefetcher, and the per-iteration refcount write dirties a cache line per element.
+Each object costs a 56-byte allocation (40-byte header plus 16-byte ZVAL) reached by a pointer. Iterating a collection of them is a dependent-load chain that defeats the prefetcher, and the per-iteration refcount write dirties a cache line per element.
 
-Store bulk data as scalars in a packed array.
+Store bulk data as scalars in a packed array instead.
 
 ## Returns: avoid per-call allocation
 
-Returning a literal array allocates on every call:
-
-- A scalar lives inline in the returned ZVAL and can stay in a register under the JIT
-- Out-parameters by reference and the slot gets bound once at frame build
+Returning a literal array allocates on every call. Out-parameters by reference and the slot gets bound once at frame build
 
 ```php
-function router_lookup(Router $router, string $path, mixed &$handler = null, array &$out = []): bool
+function router_lookup(
+    Router $router,
+    string $path,
+    mixed &$handler = null,
+    array &$out = []
+): bool {}
 ```
 
-## Mutate copy-on-write values in place
+## Append to a buffer
 
-A large string or array passed by value is copied on first write under COW. In a
-loop the copy, not the work, dominates. Take it by reference and mutate in place:
+If a string only has a single reference to it you can append data to mutate in place.
 
 ```php
 function process(string &$buffer): void { $buffer .= '-x'; }
 ```
 
-## Pass a view, not a copy
-
-To work on part of a buffer, pass the buffer with an offset and length, not a copied slice. The copy allocates and duplicates bytes; the view is three integers.
-
-```php
-// bad: substr copies the region before parsing it
-$value = number_parse(substr($buffer, $start, $len));
-
-// good: parse in place over (buffer, offset, len)
-$value = number_parse($buffer, $start, $len);
-```
-
 ## Sentinel-delimited runs
 
-For variable-length runs, mark boundaries with an in-band sentinel (e.g. NAN) rather than storing separate lengths. The buffer stays flat and a single pass walks it.
+For variable-length runs, mark boundaries with an in-band sentinel (e.g. NAN, -1, etc) rather than storing separate lengths. The buffer stays flat and a single pass walks it.
 
 ## Bind global symbols explicitly
 
 Without it the compiler cannot prove the call targets the internal function and prevents inlining and specialization.
 
 ```php
-namespace your_space;
+namespace app;
 
 $length = strlen($demo);   // runtime-resolved
 $length = \strlen($demo);  // bound to the internal function
@@ -78,7 +67,7 @@ $cell = ($x & Limit::MASK) | (($y & Limit::MASK) << Limit::Y_SHIFT);
 
 ## Cast scalars read from packed arrays
 
-Helps the JIT emit better C code for the rest of the loop.
+Helps the JIT emit better machine code for the rest of the loop by specializing on the type.
 
 ```php
 class Point
@@ -94,38 +83,10 @@ for ($i = 0; $i < $point_count; $i += Point::STRIDE) {
     $lng = (float) $points[$i + Point::LNG];
 }
 ```
-## Dispatch by match, not by callback
-
-```php
-class Scan
-{
-    const CSV = 0;
-    const TSV = 1;
-}
-
-function scan(string $buffer, int $mode): array
-{
-    return match ($mode) {
-        // delimiter constant-folds
-        Scan::CSV => scan_delim($buffer, \ord(',')),
-        // into each inlined arm
-        Scan::TSV => scan_delim($buffer, \ord("\t")),
-    };
-}
-```
-
-```php
-for ($i = 0; $i < $token_count; $i++) {
-    $kind = (int) $kinds[$i];
-    $nodes[] = match ($kind) {
-        Tok::NUM => num_read($buffer, $i),
-        Tok::STR => str_read($buffer, $i),
-        Tok::SYM => sym_read($buffer, $i),
-    };
-}
-```
 
 ## Jump with goto in a hot state machine
+
+Can be useful as function call overhead still largely dominates in the PHP engine, and the JIT has limited escape analysis to cover for it.
 
 ```php
 class St
@@ -162,7 +123,3 @@ WORD:
 
 DONE:
 ```
-
-## Inlining and dispatch
-
-The JIT inlines small functions called with known types on a predictable path. Keep hot bodies short with scalar arguments, and keep interface and abstract dispatch out of hot paths so the call target stays statically known.
