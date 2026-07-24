@@ -341,8 +341,6 @@ Extracting into helpers reads more like prose. When a procedure grows long, ask 
 ```PHP
 namespace app\ledger;
 
-use phunk\module;
-
 // the parent reads like a table of contents
 function account_import(array $rows): int
 {
@@ -352,8 +350,8 @@ function account_import(array $rows): int
 }
 
 // TIP: A helper that exists only for account_import keeps the parent name as a
-// prefix and is marked #[module\Local].
-#[module\Local]
+// prefix and is marked #![local]
+#![local]
 function account_import_rows_valid(array $rows): array
 {
     return $rows;

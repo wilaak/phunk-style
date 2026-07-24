@@ -59,7 +59,7 @@ enum AccountError
 
 readonly class LoadResult
 {
-    public function __construct(
+    function __construct(
         public ?Account      $account = null,
         public ?AccountError $error   = null,
     ) {}
@@ -67,7 +67,7 @@ readonly class LoadResult
 
 readonly class DebitResult
 {
-    public function __construct(
+    function __construct(
         public ?Account      $account = null,
         public ?AccountError $error   = null,
     ) {}
@@ -75,7 +75,7 @@ readonly class DebitResult
 
 readonly class TransferResult
 {
-    public function __construct(
+    function __construct(
         public bool          $settled = false,
         public ?AccountError $error   = null,
     ) {}
