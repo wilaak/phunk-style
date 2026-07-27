@@ -4,7 +4,7 @@ Some might think:
 
 > If I really wanted my code to be fast I would use a faster language!
 
-That is fair, and you will likely get better performance either way. But, writing performant code is more than just that; sure, some languages don't provide the necessary features, but PHP has a JIT, and it can turn a lot of your slow VM interpreted code into C code that gets compiled to machine code on the fly.
+That is fair, and you will likely get better performance either way. But, writing performant code is more than just that; sure, some languages don't provide the necessary features, but PHP has a JIT, and it can turn a lot of your slow VM interpreted into machine code on the fly.
 
 That is not to say PHP covers all the wants and needs for writing performant code, there are still some dearly missed primitives that I would love for it to have (one being byte buffer primitives to avoid string copying for simple comparisons or replacements).
 
